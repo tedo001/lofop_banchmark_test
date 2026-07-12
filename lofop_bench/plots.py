@@ -73,6 +73,36 @@ def plot_latency_by_batch(results: list[LatencyResult], output_dir: str | Path) 
     return path
 
 
+def plot_accuracy_curve(history: list[dict], output_dir: str | Path) -> Path | None:
+    """Plot mAP@50 and training loss against epoch -> ``accuracy_curve.png``.
+
+    This is the "should I train longer?" diagnostic: if mAP is still rising at
+    the last epoch, more epochs will help; if it has flattened, the model has
+    plateaued and you need a bigger variant or more data.
+    """
+    points = [h for h in history if h.get("map50") is not None]
+    if not points:
+        return None
+    plt = _require_matplotlib()
+    epochs = [h["epoch"] for h in points]
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(epochs, [h["map50"] for h in points], marker="o", color="#3fb950", label="mAP@50")
+    ax.set_xlabel("epoch")
+    ax.set_ylabel("mAP@50", color="#3fb950")
+    ax.grid(True, alpha=0.3)
+    losses = [h.get("loss") for h in points]
+    if any(v is not None for v in losses):
+        ax2 = ax.twinx()
+        ax2.plot(epochs, losses, color="#58a6ff", alpha=0.7, label="train loss")
+        ax2.set_ylabel("train loss", color="#58a6ff")
+    ax.set_title("Accuracy vs. epoch")
+    path = Path(output_dir) / "accuracy_curve.png"
+    fig.tight_layout()
+    fig.savefig(path, dpi=120)
+    plt.close(fig)
+    return path
+
+
 def render_summary_image(
     output_dir: str | Path,
     *,

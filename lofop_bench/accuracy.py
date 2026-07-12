@@ -24,8 +24,39 @@ import torch
 from lofop import Detector
 from lofop.data import load_dataset
 from lofop.data.synthetic import generate_shapes_dataset
+from lofop.registries import EVENTS
 
 from lofop_bench.progress import TrainingProgress
+
+
+class _MetricHistory:
+    """Collect per-epoch loss and mAP by listening to ``train.epoch_end``.
+
+    Lets a run produce an mAP-vs-epoch curve, which is the honest diagnostic for
+    "should I train longer?": still climbing means keep going; flat means this
+    model has plateaued.
+    """
+
+    def __init__(self) -> None:
+        self.epochs: list[dict] = []
+        self._subscription = None
+
+    def __enter__(self) -> _MetricHistory:
+        self._subscription = EVENTS.subscribe("train.epoch_end", self._record)
+        return self
+
+    def _record(self, event) -> None:
+        metrics = event.get("metrics") or {}
+        self.epochs.append({
+            "epoch": int(event.get("epoch", 0)) + 1,
+            "loss": event.get("loss"),
+            "map50": metrics.get("map50"),
+            "map50_95": metrics.get("map50_95"),
+        })
+
+    def __exit__(self, *exc_info) -> None:
+        if self._subscription is not None:
+            EVENTS.unsubscribe(self._subscription)
 
 
 @dataclass(frozen=True)
@@ -92,13 +123,14 @@ def run_accuracy(
     device = _resolve_device(device)
     output_dir = Path(output_dir)
 
+    history = _MetricHistory()
     if data_format and train_source:
         dataset_name = data_format
         kwargs = {"image_root": image_root} if image_root else {}
         val = load_dataset(data_format, val_source or train_source, **kwargs)
         num_classes = len(val.categories)
         detector = Detector(variant, num_classes=num_classes, image_size=image_size, device=device)
-        with TrainingProgress(epochs, prefix=f"  training {variant} on {dataset_name}"):
+        with history, TrainingProgress(epochs, prefix=f"  training {variant} on {dataset_name}"):
             detector.train(
                 data_format=data_format, train_source=train_source, val_source=val_source,
                 image_root=image_root, epochs=epochs, batch_size=batch_size, lr=lr,
@@ -115,7 +147,7 @@ def run_accuracy(
         )
         num_classes = len(train.categories)
         detector = Detector(variant, num_classes=num_classes, image_size=image_size, device=device)
-        with TrainingProgress(epochs, prefix=f"  training {variant} on {dataset_name}"):
+        with history, TrainingProgress(epochs, prefix=f"  training {variant} on {dataset_name}"):
             detector.train(
                 train_data=train, val_data=val, epochs=epochs, batch_size=batch_size, lr=lr,
                 workers=0, checkpoint_dir=output_dir / "checkpoints",
@@ -133,5 +165,8 @@ def run_accuracy(
     (output_dir / f"{basename}.md").write_text(result.to_markdown(), encoding="utf-8")
     (output_dir / f"{basename}.json").write_text(
         json.dumps(asdict(result), indent=2) + "\n", encoding="utf-8"
+    )
+    (output_dir / f"{basename}_history.json").write_text(
+        json.dumps(history.epochs, indent=2) + "\n", encoding="utf-8"
     )
     return result

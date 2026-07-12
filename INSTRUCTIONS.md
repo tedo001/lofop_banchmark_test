@@ -187,17 +187,27 @@ python cv_detector.py --data-config configs/coco.yaml --size 640          # webc
 
 ### Getting the accuracy up (the recipe that matters)
 
-More data + the right settings, in order of impact:
+LOFOP ships **no pretrained weights**, so every run trains from scratch — that
+takes far more epochs and data than fine-tuning. Levers, in order of impact:
 
 1. **More images** — drop `--max-images`, or fewer `--classes`, so each class
    has more examples. This is the biggest lever.
-2. **More epochs** — `--epochs 200`/`300`. Watch the loss bar keep falling.
+2. **More epochs** — `--epochs 300`. From scratch needs it.
 3. **Bigger model** — `--variant s` then `--variant ex` for more capacity.
 4. **Full resolution** — keep `--acc-size 640`.
-5. **Fewer classes** — a 1-3 class detector trained well beats a weak 80-class one.
+5. **Tune training** — `--batch-size` (raise it while VRAM allows) and `--lr`.
+6. **Fewer classes** — a 1-3 class detector trained well beats a weak 80-class one.
 
-Train from scratch takes many epochs; the loss bar falling and mAP climbing
-across runs is the signal you're on track.
+**Read the curve to decide.** Every run with `--plots` writes
+`results/accuracy_curve.png` (mAP@50 and loss vs. epoch):
+
+- **mAP still rising at the last epoch** → train longer (raise `--epochs`).
+- **mAP flat while loss still drops** → the model is saturating; go bigger
+  (`--variant s`/`ex`) or add data.
+- **Loss flat and mAP low** → try a different `--lr`, or you need much more data.
+
+`results/accuracy_history.json` has the per-epoch numbers if you want to plot
+them yourself.
 
 ---
 

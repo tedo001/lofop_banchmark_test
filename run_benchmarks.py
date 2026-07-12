@@ -58,6 +58,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--variant", default="n", help="variant for the accuracy run")
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--acc-size", type=int, default=96, help="accuracy training resolution")
+    parser.add_argument("--batch-size", type=int, default=8, help="accuracy training batch size")
+    parser.add_argument("--lr", type=float, default=0.01, help="accuracy training learning rate")
     parser.add_argument("--data-config", type=Path, default=None,
                         help="YAML with data_format/train_source/val_source/image_root")
     parser.add_argument("--data-format", default=None)
@@ -103,7 +105,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"== Accuracy benchmark ({device}, training) ==", file=sys.stderr)
         accuracy_result = run_accuracy(
             args.results_dir, variant=args.variant, device=device, epochs=args.epochs,
-            image_size=args.acc_size, data_format=data_format, train_source=train_source,
+            image_size=args.acc_size, batch_size=args.batch_size, lr=args.lr,
+            data_format=data_format, train_source=train_source,
             val_source=val_source, image_root=image_root,
         )
         print(accuracy_result.to_markdown())
@@ -111,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.plots:
         print("== Rendering charts ==", file=sys.stderr)
         from lofop_bench.plots import (
+            plot_accuracy_curve,
             plot_latency_by_batch,
             plot_size_vs_speed,
             render_summary_image,
@@ -119,6 +123,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {plot_size_vs_speed(structural_reports, args.results_dir)}", file=sys.stderr)
         if latency_results:
             print(f"  {plot_latency_by_batch(latency_results, args.results_dir)}", file=sys.stderr)
+        if accuracy_result is not None:
+            history_file = args.results_dir / "accuracy_history.json"
+            if history_file.is_file():
+                import json as _json
+
+                curve = plot_accuracy_curve(
+                    _json.loads(history_file.read_text(encoding="utf-8")), args.results_dir
+                )
+                if curve:
+                    print(f"  {curve}  <- mAP-vs-epoch (still rising? train longer)",
+                          file=sys.stderr)
         summary = render_summary_image(
             args.results_dir, environment=env, structural=structural_reports,
             latency=latency_results, accuracy=accuracy_result,

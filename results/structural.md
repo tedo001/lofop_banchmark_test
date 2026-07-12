@@ -5,7 +5,7 @@
 | Precision | - | - | - |
 | Recall | - | - | - |
 | GPU FPS | - | - | - |
-| CPU FPS | 2.5 | 20.9 | 10.7 |
+| CPU FPS | 3.4 | 28.4 | 13.5 |
 | Parameters | 20,120,785 | 1,306,129 | 3,844,297 |
 | FLOPs | 83.24 G | 6.54 G | 15.93 G |
 | Model Size | 80.7 MB | 5.3 MB | 15.4 MB |

@@ -4,9 +4,9 @@ Device `cpu`, 640px, AMP=False. Per-image latency in ms (lower is better); throu
 
 | Variant | Batch | p50 (ms) | p90 (ms) | p99 (ms) | FPS |
 |---|---:|---:|---:|---:|---:|
-| lofop-detect-ex | 1 | 402.198 | 417.555 | 427.74 | 2.5 |
-| lofop-detect-ex | 4 | 582.786 | 670.069 | 682.314 | 1.7 |
-| lofop-detect-n | 1 | 46.601 | 50.926 | 54.29 | 21.5 |
-| lofop-detect-n | 4 | 54.777 | 57.989 | 58.784 | 18.3 |
-| lofop-detect-s | 1 | 92.455 | 100.119 | 103.059 | 10.8 |
-| lofop-detect-s | 4 | 122.748 | 130.538 | 131.253 | 8.1 |
+| lofop-detect-ex | 1 | 320.215 | 391.286 | 472.091 | 3.1 |
+| lofop-detect-ex | 4 | 404.798 | 434.6 | 441.743 | 2.5 |
+| lofop-detect-n | 1 | 37.985 | 40.743 | 42.638 | 26.3 |
+| lofop-detect-n | 4 | 32.602 | 35.917 | 37.313 | 30.7 |
+| lofop-detect-s | 1 | 71.22 | 80.738 | 92.718 | 14.0 |
+| lofop-detect-s | 4 | 82.09 | 90.892 | 92.541 | 12.2 |
