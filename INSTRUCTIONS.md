@@ -153,23 +153,35 @@ downloads and prepares them, then it's the same benchmark flow.
 
 ### B1. Get COCO (one command)
 
+**A ~4-5 GB slice of the big training set** (recommended for real accuracy):
+
 ```bash
-python scripts/get_coco.py --classes person car --max-images 2000
+python scripts/get_coco.py --split train2017 --max-gb 5
 ```
 
-Downloads COCO val2017 (~1 GB images + ~250 MB annotations, cached after the
-first run), keeps the classes you name, splits train/val, and writes
-`configs/coco.yaml`. Options:
-
-- `--classes person car ...` — focus on a few classes for a strong, fast result
-  (omit for all 80).
-- `--max-images 2000` — cap the image count for a quicker first run (omit for
-  the full 5,000).
-
-**PowerShell (one line):**
-
 ```powershell
-python scripts\get_coco.py --classes person car --max-images 2000
+python scripts\get_coco.py --split train2017 --max-gb 5
+```
+
+COCO2017 ships as fixed pieces — `val2017` (~1 GB, 5k images) and `train2017`
+(~18 GB, 118k images); there is no official 4-5 GB split. So `--split train2017
+--max-gb 5` streams images one at a time from the training set and **stops at ~5
+GB** (~30,000 images), giving you a big real dataset without the full 18 GB. The
+annotations (~250 MB) download once and are cached.
+
+Options:
+
+- `--split val2017` (default) — the 5,000-image val set as one ~1 GB zip.
+- `--split train2017 --max-gb 5` — a size-capped slice of the 118k training set.
+- `--max-images N` — hard cap on image count (exact).
+- `--classes person car ...` — download only those classes (omit for all 80).
+
+Examples:
+
+```bash
+python scripts/get_coco.py --split train2017 --max-gb 5                 # ~5 GB, all classes
+python scripts/get_coco.py --split train2017 --classes person --max-gb 4  # ~4 GB of people
+python scripts/get_coco.py                                             # full val2017 (~1 GB)
 ```
 
 ### B2. Train on it
