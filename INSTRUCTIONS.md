@@ -13,6 +13,20 @@ The plan, in order:
 Do Stage A end-to-end first. Only move to Stage B once you can see boxes on
 COCO128 images.
 
+> ### Windows PowerShell users, read this first
+>
+> - **Use ONE virtualenv.** Do all `pip install` and all runs in the same
+>   activated venv (e.g. `.venv`). If you create a second venv, it starts empty
+>   and you'll get `ModuleNotFoundError` until you reinstall everything into it.
+>   Verify you're in the right one: `python -c "import lofop, yaml, torch"` — no
+>   output means good.
+> - **Line continuation is a backtick `` ` ``, not `\`.** The multi-line commands
+>   below use `\` (bash style). In PowerShell either replace `\` with `` ` `` or,
+>   simplest, **put the whole command on one line** (the single-line versions
+>   below are ready to paste).
+> - **Paths use `\`** on Windows: `configs\coco128.yaml` (forward slashes also
+>   work in Python, so either is fine).
+
 ---
 
 ## 1. One-time setup (PyCharm)
@@ -67,6 +81,12 @@ python run_benchmarks.py --device cuda \
     --data-config configs/coco128.yaml \
     --variant n --epochs 100 --acc-size 640 \
     --skip-latency --skip-structural
+```
+
+**PowerShell (one line — paste this):**
+
+```powershell
+python run_benchmarks.py --device cuda --data-config configs\coco128.yaml --variant n --epochs 100 --acc-size 640 --skip-latency --skip-structural
 ```
 
 Writes `results/accuracy.md` / `.json` (mAP@50, mAP@50:95, precision, recall,

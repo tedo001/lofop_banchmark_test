@@ -47,12 +47,15 @@ to full COCO (full walkthrough in [INSTRUCTIONS.md](INSTRUCTIONS.md)):
 python scripts/get_coco128.py
 
 # 2. Train + evaluate on it (GPU):
-python run_benchmarks.py --device cuda --data-config configs/coco128.yaml \
-    --variant n --epochs 100 --acc-size 640 --skip-latency --skip-structural
+python run_benchmarks.py --device cuda --data-config configs/coco128.yaml --variant n --epochs 100 --acc-size 640 --skip-latency --skip-structural
 
 # 3. SEE it detect - draws predicted boxes on val images -> results/detections/:
 python scripts/detect_sample.py --data-config configs/coco128.yaml --size 640
 ```
+
+> **Windows PowerShell:** keep each command on **one line** (don't use `\` to
+> split — that's bash; PowerShell uses a backtick `` ` ``). Do every `pip install`
+> and run in the **same** activated venv. See [INSTRUCTIONS.md](INSTRUCTIONS.md).
 
 Then point the same commands at the full COCO dataset with your own
 `configs/my_data.yaml`.
