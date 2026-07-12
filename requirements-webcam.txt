@@ -1,0 +1,2 @@
+# Optional: live detection with cv_detector.py (webcam / video / image).
+opencv-python>=4.8

@@ -43,14 +43,21 @@ The recommended path — verify everything on a 128-image COCO subset, then scal
 to full COCO (full walkthrough in [INSTRUCTIONS.md](INSTRUCTIONS.md)):
 
 ```bash
-# 1. Get COCO128 (128 images, ~6 MB) and a ready config:
-python scripts/get_coco128.py
+# 1. Get COCO128 (128 images, ~6 MB), one class so it can actually learn:
+python scripts/get_coco128.py --classes person
 
-# 2. Train + evaluate on it (GPU):
+# 2. Train + evaluate on it (GPU) -> results/accuracy.md:
 python run_benchmarks.py --device cuda --data-config configs/coco128.yaml --variant n --epochs 100 --acc-size 640 --skip-latency --skip-structural
 
-# 3. SEE it detect - draws predicted boxes on val images -> results/detections/:
+# 3. SEE it detect - boxes drawn on val images -> results/detections/:
 python scripts/detect_sample.py --data-config configs/coco128.yaml --size 640
+
+# 4. LIVE detection from your webcam (press q to quit):
+pip install -r requirements-webcam.txt
+python cv_detector.py --data-config configs/coco128.yaml --size 640
+
+# 5. One results image (params, speed, latency, accuracy) -> results/summary.png:
+python run_benchmarks.py --device cuda --amp --plots --skip-accuracy
 ```
 
 > **Windows PowerShell:** keep each command on **one line** (don't use `\` to
@@ -104,11 +111,13 @@ lofop_bench/
   environment.py  # capture machine + versions
   structural.py   # size/speed of every variant (reuses lofop.utils.benchmark)
   latency.py      # GPU-aware latency percentiles, throughput, VRAM
-  accuracy.py     # train + evaluate: synthetic or real COCO/YOLO/VOC
-  plots.py        # optional matplotlib charts
+  accuracy.py     # train + evaluate: synthetic shapes or a real COCO dataset
+  progress.py     # live progress bars for long steps
+  plots.py        # optional matplotlib charts + summary.png report image
 run_benchmarks.py # CLI entry point -> results/
+cv_detector.py    # live detection: webcam / video / image, with FPS overlay
 scripts/
-  get_coco128.py  # download COCO128 and arrange it for LOFOP
+  get_coco128.py  # download COCO128 (optionally one class) as a COCO dataset
   detect_sample.py # run the trained detector and draw boxes on sample images
 configs/          # dataset config template (+ generated coco128.yaml)
 results/          # committed md/CSV/JSON/PNG from the latest run

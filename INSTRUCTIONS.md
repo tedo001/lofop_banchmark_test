@@ -67,14 +67,22 @@ If it prints `False`: update the NVIDIA driver, then reinstall the `cu121` wheel
 ### A1. Download the small dataset (one command)
 
 ```bash
-python scripts/get_coco128.py
+python scripts/get_coco128.py --classes person
 ```
 
-This downloads COCO128, splits it into train/val, arranges it as LOFOP YOLO
-roots under `data/coco128/`, and writes `configs/coco128.yaml`. (`data/` is
-git-ignored, so the dataset is not committed.)
+This downloads COCO128, keeps only the class(es) you name, splits it
+train/val, writes a COCO-format dataset under `data/coco128/`, and generates
+`configs/coco128.yaml`. (`data/` is git-ignored, so the dataset is not
+committed.)
 
-### A2. Train + evaluate on COCO128
+> **Why `--classes person`?** COCO128 is ~100 images. Learning **80 classes**
+> from that, from scratch, is impossible — you'll get near-zero mAP. Narrowing
+> to **one common class** (person appears in most images) makes it a tractable
+> task, so the model actually learns and you get real detections to look at.
+> Drop `--classes` to keep all 80 (a plumbing check, not a real result), or pass
+> several, e.g. `--classes person car`.
+
+### A2. Train + evaluate
 
 ```bash
 python run_benchmarks.py --device cuda \
@@ -89,37 +97,47 @@ python run_benchmarks.py --device cuda \
 python run_benchmarks.py --device cuda --data-config configs\coco128.yaml --variant n --epochs 100 --acc-size 640 --skip-latency --skip-structural
 ```
 
-A live progress bar shows the epoch, current loss, and ETA while it trains, so
-you can see it working. It writes `results/accuracy.md` / `.json` (mAP@50,
-mAP@50:95, precision, recall, F1) and saves the trained weights to
-`results/checkpoints/best.pt`.
+A live progress bar shows the epoch, loss, and ETA while it trains. It writes
+`results/accuracy.md` / `.json` (mAP@50, mAP@50:95, precision, recall, F1) and
+saves the trained weights to `results/checkpoints/best.pt`.
 
-> COCO128 is tiny (128 images) — it is for **verifying the pipeline works**, not
-> for high accuracy. Expect modest mAP; that is normal.
-
-### A3. See it detect (the important part)
+### A3. See it detect on sample images
 
 ```bash
 python scripts/detect_sample.py --data-config configs/coco128.yaml --size 640
 ```
 
-This runs `results/checkpoints/best.pt` on a handful of COCO128 val images and
-writes pictures with the predicted boxes drawn on them to
-`results/detections/`. Open them in PyCharm — this is your proof the detector
-trained and detects.
+Runs `results/checkpoints/best.pt` on validation images and writes pictures with
+the predicted boxes drawn on them to `results/detections/`. Open them in
+PyCharm. Raise/lower `--score-threshold` (default 0.25) for fewer/more boxes.
 
-Raise/lower `--score-threshold` (default 0.25) to show fewer/more boxes.
-
-### A4. (Optional) full speed benchmark on the GPU
+### A4. Live detection from your webcam
 
 ```bash
-python run_benchmarks.py --device cuda --amp --skip-accuracy --plots
+pip install -r requirements-webcam.txt
+python cv_detector.py --data-config configs/coco128.yaml --size 640
+```
+
+Opens your laptop camera and runs the detector live with boxes + an FPS overlay.
+Press **`q`** in the window to quit. Also works on a video or a single image:
+
+```bash
+python cv_detector.py --source clip.mp4  --data-config configs/coco128.yaml --save out.mp4
+python cv_detector.py --source photo.jpg --data-config configs/coco128.yaml
+```
+
+### A5. Full speed benchmark + one results image
+
+```bash
+python run_benchmarks.py --device cuda --amp --plots --skip-accuracy
 ```
 
 Structural metrics + GPU latency (p50/p90/p99), throughput per batch size, and
-peak VRAM for all variants, with charts in `results/`.
+peak VRAM for all variants. With `--plots` it also writes **`results/summary.png`**
+— a single report image (params, speed, latency, and accuracy in one picture)
+you can drop straight into a slide or a README.
 
-### A5. Save results to GitHub (PyCharm)
+### A6. Save results to GitHub (PyCharm)
 
 Commit the changed `results/*.md/.json/.png` (Ctrl+K) and push (Ctrl+Shift+K).
 The dataset, checkpoints, and detection images stay local (git-ignored); the

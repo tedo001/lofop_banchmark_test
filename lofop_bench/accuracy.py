@@ -5,7 +5,7 @@ Two modes:
 * **Synthetic (default):** a short, fully deterministic run on LOFOP's built-in
   ``shapes`` dataset -- a reproducible regression instrument, not a real-world
   claim.
-* **Real dataset:** point it at a COCO/YOLO/VOC dataset and it trains a variant
+* **Real dataset:** point it at a COCO-format dataset and it trains a variant
   and reports genuine mAP/precision/recall/F1. On a CUDA GPU (e.g. an RTX 4060)
   training uses AMP automatically and is dramatically faster.
 

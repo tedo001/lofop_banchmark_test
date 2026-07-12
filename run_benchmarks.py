@@ -83,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
 
     structural_reports = None
     latency_results = None
+    accuracy_result = None
 
     if not args.skip_structural:
         print("== Structural benchmark ==", file=sys.stderr)
@@ -100,20 +101,29 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.skip_accuracy:
         print(f"== Accuracy benchmark ({device}, training) ==", file=sys.stderr)
-        result = run_accuracy(
+        accuracy_result = run_accuracy(
             args.results_dir, variant=args.variant, device=device, epochs=args.epochs,
             image_size=args.acc_size, data_format=data_format, train_source=train_source,
             val_source=val_source, image_root=image_root,
         )
-        print(result.to_markdown())
+        print(accuracy_result.to_markdown())
 
     if args.plots:
         print("== Rendering charts ==", file=sys.stderr)
-        from lofop_bench.plots import plot_latency_by_batch, plot_size_vs_speed
+        from lofop_bench.plots import (
+            plot_latency_by_batch,
+            plot_size_vs_speed,
+            render_summary_image,
+        )
         if structural_reports:
             print(f"  {plot_size_vs_speed(structural_reports, args.results_dir)}", file=sys.stderr)
         if latency_results:
             print(f"  {plot_latency_by_batch(latency_results, args.results_dir)}", file=sys.stderr)
+        summary = render_summary_image(
+            args.results_dir, environment=env, structural=structural_reports,
+            latency=latency_results, accuracy=accuracy_result,
+        )
+        print(f"  {summary}  <- single results image", file=sys.stderr)
 
     print(f"Results written to {args.results_dir}", file=sys.stderr)
     return 0

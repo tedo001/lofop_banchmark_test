@@ -2,14 +2,18 @@
 
 Kept separate and import-guarded so the core harness has no plotting dependency:
 ``pip install matplotlib`` (or ``pip install -r requirements-plots.txt``) to
-enable. Renders two PNGs under ``results/``: model size vs. throughput, and
-per-variant latency by batch size.
+enable. Renders PNGs under ``results/``: model size vs. throughput, per-variant
+latency by batch size, and a single ``summary.png`` report image that gathers
+the whole run into one picture.
 """
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
+from lofop_bench.accuracy import AccuracyResult
+from lofop_bench.environment import Environment
 from lofop_bench.latency import LatencyResult
 from lofop.utils import ModelReport
 
@@ -67,3 +71,116 @@ def plot_latency_by_batch(results: list[LatencyResult], output_dir: str | Path) 
     fig.savefig(path, dpi=120)
     plt.close(fig)
     return path
+
+
+def render_summary_image(
+    output_dir: str | Path,
+    *,
+    environment: Environment | None = None,
+    structural: list[ModelReport] | None = None,
+    latency: list[LatencyResult] | None = None,
+    accuracy: AccuracyResult | None = None,
+) -> Path:
+    """Render the whole run as a single ``summary.png`` report card.
+
+    A dark-themed dashboard: a header with the machine/version, a bar chart of
+    model size, a bar chart of forward speed, and a text panel with the accuracy
+    result. Panels for benchmarks that were skipped are simply left out.
+    """
+    plt = _require_matplotlib()
+    fig = plt.figure(figsize=(11, 6.5), facecolor="#0d1117")
+    grid = fig.add_gridspec(2, 2, height_ratios=[1, 1.15], hspace=0.42, wspace=0.22)
+
+    device = "cpu"
+    if environment is not None:
+        device = environment.device_name if environment.cuda_available else "CPU"
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    version = environment.lofop_version if environment else "?"
+    fig.suptitle("LOFOP Benchmark Report", color="#e6edf3", fontsize=20, fontweight="bold", y=0.98)
+    fig.text(0.5, 0.915, f"lofop {version}   |   {device}   |   {stamp}",
+             color="#8b949e", fontsize=11, ha="center")
+
+    _bar_panel(fig.add_subplot(grid[0, 0]), structural, "parameters", 1e6,
+               "Parameters (M)", "#58a6ff")
+    _speed_panel(fig.add_subplot(grid[0, 1]), structural)
+    _latency_panel(fig.add_subplot(grid[1, 0]), latency)
+    _accuracy_panel(fig.add_subplot(grid[1, 1]), accuracy)
+
+    path = Path(output_dir) / "summary.png"
+    fig.savefig(path, dpi=130, facecolor=fig.get_facecolor())
+    plt.close(fig)
+    return path
+
+
+def _style_axes(ax, title: str) -> None:
+    ax.set_facecolor("#161b22")
+    ax.set_title(title, color="#e6edf3", fontsize=12, fontweight="bold")
+    ax.tick_params(colors="#8b949e", labelsize=8)
+    for spine in ax.spines.values():
+        spine.set_color("#30363d")
+    ax.grid(True, alpha=0.15, color="#8b949e")
+
+
+def _short(reports: list[ModelReport]) -> list[str]:
+    return [r.name.replace("lofop-detect-", "") for r in reports]
+
+
+def _bar_panel(ax, reports, attr, scale, title, color) -> None:
+    _style_axes(ax, title)
+    if not reports:
+        ax.text(0.5, 0.5, "skipped", color="#8b949e", ha="center", va="center")
+        return
+    names = _short(reports)
+    values = [getattr(r, attr) / scale for r in reports]
+    ax.bar(names, values, color=color)
+    for i, value in enumerate(values):
+        ax.text(i, value, f"{value:.1f}", color="#e6edf3", ha="center", va="bottom", fontsize=8)
+
+
+def _speed_panel(ax, reports) -> None:
+    _style_axes(ax, "Forward speed (FPS)")
+    if not reports:
+        ax.text(0.5, 0.5, "skipped", color="#8b949e", ha="center", va="center")
+        return
+    names = _short(reports)
+    values = [(r.gpu_fps or r.cpu_fps or 0.0) for r in reports]
+    ax.bar(names, values, color="#3fb950")
+    for i, value in enumerate(values):
+        ax.text(i, value, f"{value:.0f}", color="#e6edf3", ha="center", va="bottom", fontsize=8)
+
+
+def _latency_panel(ax, results) -> None:
+    _style_axes(ax, "Latency p50 per image (ms)")
+    if not results:
+        ax.text(0.5, 0.5, "skipped", color="#8b949e", ha="center", va="center")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        return
+    for result in results:
+        batches = sorted(result.batch_latencies_ms)
+        p50 = [result.batch_latencies_ms[b]["p50"] for b in batches]
+        ax.plot(batches, p50, marker="o", label=result.variant)
+    ax.set_xlabel("batch size", color="#8b949e", fontsize=8)
+    ax.legend(fontsize=7, facecolor="#161b22", labelcolor="#e6edf3", edgecolor="#30363d")
+
+
+def _accuracy_panel(ax, accuracy) -> None:
+    _style_axes(ax, "Accuracy")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    if accuracy is None:
+        ax.text(0.5, 0.5, "skipped", color="#8b949e", ha="center", va="center")
+        return
+    lines = [
+        f"variant   lofop-detect-{accuracy.variant}",
+        f"dataset   {accuracy.dataset}",
+        f"epochs    {accuracy.epochs} @ {accuracy.image_size}px ({accuracy.device})",
+        "",
+        f"mAP@50      {accuracy.map50:.4f}",
+        f"mAP@50:95   {accuracy.map50_95:.4f}",
+        f"precision   {accuracy.precision:.4f}",
+        f"recall      {accuracy.recall:.4f}",
+        f"F1          {accuracy.f1:.4f}",
+    ]
+    ax.text(0.04, 0.95, "\n".join(lines), color="#e6edf3", fontsize=10, va="top",
+            family="monospace", transform=ax.transAxes)

@@ -9,7 +9,7 @@ released package. Benchmark families:
 * ``latency``: GPU-aware per-image latency percentiles (p50/p90/p99),
   throughput at several batch sizes, and peak VRAM (CUDA).
 * ``accuracy``: train-and-evaluate -- deterministic on synthetic ``shapes``, or
-  on a real COCO/YOLO/VOC dataset -- reporting mAP/precision/recall/F1.
+  on a real COCO-format dataset -- reporting mAP/precision/recall/F1.
 * ``environment``: the hardware/software the run was measured on.
 
 Everything writes markdown, CSV, and/or JSON so results are readable by humans
