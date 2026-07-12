@@ -27,7 +27,7 @@ jobs:
           cache: pip
       - name: Install CPU PyTorch
         run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - name: Install the harness (pulls LOFOP under test)
+      - name: Install the harness (installs the published lofop from PyPI)
         run: python -m pip install -r requirements.txt
       - name: Run benchmarks (CPU regression guard; batch 1 to stay fast)
         run: >

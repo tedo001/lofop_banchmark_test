@@ -24,12 +24,18 @@ and optional PNG charts to `results/`.
 
 ## Install
 
+This benchmarks the **published** [`lofop`](https://pypi.org/project/lofop/)
+package from PyPI (pinned in `requirements.txt`).
+
 ```bash
 # On an RTX GPU, install the CUDA build of PyTorch first:
 pip install torch --index-url https://download.pytorch.org/whl/cu121
-pip install -r requirements.txt
-pip install -r requirements-plots.txt   # optional charts
+pip install -r requirements.txt          # installs lofop from PyPI
+pip install -r requirements-plots.txt    # optional charts
 ```
+
+The committed results were measured against `lofop 0.1.4`; `results/environment.json`
+records the exact version every run used.
 
 ## Quick start: small COCO first
 
@@ -64,10 +70,11 @@ python run_benchmarks.py --device cuda --variant s --epochs 50 --acc-size 640
 See [INSTRUCTIONS.md](INSTRUCTIONS.md) for every flag and 4060-specific tips
 (VRAM, batch sizes, OOM fallback).
 
-## Reference results (CPU baseline — regenerate on your GPU)
+## Reference results (`lofop 0.1.4`, CPU baseline — regenerate on your GPU)
 
-Committed under `results/`. These are a CPU reference so the repo has real data;
-your 4060 run will add GPU FPS, VRAM, and much lower latency.
+Committed under `results/`, measured against the published `lofop 0.1.4`. These
+are a CPU reference so the repo has real data; your 4060 run will add GPU FPS,
+VRAM, and much lower latency.
 
 **Structural (640x640, batch 1, CPU):**
 
@@ -76,10 +83,10 @@ your 4060 run will add GPU FPS, VRAM, and much lower latency.
 | Parameters | 1,306,129 | 3,844,297 | 20,120,785 |
 | FLOPs | 6.54 G | 15.93 G | 83.24 G |
 | Model Size | 5.3 MB | 15.4 MB | 80.7 MB |
-| CPU FPS | 22.9 | 11.5 | 2.8 |
+| CPU FPS | 21.8 | 10.4 | 3.0 |
 
-**Latency p50 per image (640px, CPU):** n 43.2 ms (23 FPS) · s 83.6 ms (12 FPS) ·
-ex 317 ms (3 FPS) at batch 1. On an RTX 4060 with `--amp` expect these to drop by
+**Latency p50 per image (640px, CPU):** n 44.5 ms (23 FPS) · s 86.6 ms (12 FPS) ·
+ex 323 ms (3 FPS) at batch 1. On an RTX 4060 with `--amp` expect these to drop by
 roughly an order of magnitude and throughput to scale with batch size.
 
 **Accuracy (synthetic `shapes`, lofop-detect-n, 30 CPU epochs @96px, seed 0):**

@@ -1,14 +1,14 @@
 {
   "variant": "n",
-  "dataset": "yolo",
+  "dataset": "shapes (synthetic)",
   "device": "cpu",
-  "epochs": 2,
+  "epochs": 30,
   "image_size": 96,
-  "num_classes": 80,
+  "num_classes": 2,
   "seed": 0,
-  "map50": 0.0,
-  "map50_95": 0.0,
-  "precision": 0.0,
-  "recall": 0.0,
-  "f1": 0.0
+  "map50": 0.5731150326630563,
+  "map50_95": 0.34184475109178575,
+  "precision": 0.3880597014925373,
+  "recall": 0.8125,
+  "f1": 0.5252525252525252
 }

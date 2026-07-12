@@ -27,9 +27,14 @@ COCO128 images.
 
 ```bash
 pip install torch --index-url https://download.pytorch.org/whl/cu121
-pip install -r requirements.txt
-pip install -r requirements-plots.txt   # optional charts
+pip install -r requirements.txt          # installs the published lofop from PyPI
+pip install -r requirements-plots.txt    # optional charts
 ```
+
+`requirements.txt` pins `lofop[models]>=0.1.4` from
+[PyPI](https://pypi.org/project/lofop/), so you are benchmarking the released
+package (`pip install lofop`). To benchmark a specific version, edit the pin
+(e.g. `lofop[models]==0.1.4`).
 
 ### Verify the GPU
 

@@ -1,6 +1,6 @@
-# The LOFOP framework under test. Pin to the development branch; switch to a
-# released version (e.g. lofop[models]==0.1.3) once published to PyPI.
-lofop[models] @ git+https://github.com/tedo001/LOFOP.git@tedo
+# The LOFOP framework under test -- the published package from PyPI.
+# https://pypi.org/project/lofop/
+lofop[models]>=0.1.4
 
 # PyTorch. On an RTX 4060 laptop install the CUDA build INSTEAD of this line
 # (see INSTRUCTIONS.md): pip install torch --index-url https://download.pytorch.org/whl/cu121

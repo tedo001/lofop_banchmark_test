@@ -1,5 +1,5 @@
 {
-  "lofop_version": "0.1.3",
+  "lofop_version": "0.1.4",
   "python_version": "3.11.15",
   "platform": "Linux-6.18.5-x86_64-with-glibc2.39",
   "torch_version": "2.12.1+cu130",
