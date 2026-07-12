@@ -145,45 +145,59 @@ The dataset, checkpoints, and detection images stay local (git-ignored); the
 
 ---
 
-## Stage B — Scale to the full COCO dataset
+## Stage B — Train on real quality data (COCO val2017)
 
-Once Stage A works, use the **same commands** against full COCO.
+Accuracy comes from **data**: COCO128's ~100 images can't teach real detection.
+Stage B trains on **5,000 real, well-annotated COCO images** — one command
+downloads and prepares them, then it's the same benchmark flow.
 
-### B1. Get COCO 2017
-
-Download from https://cocodataset.org (or use a mirror):
-
-- `train2017.zip` (~18 GB) and/or `val2017.zip` (~1 GB)
-- `annotations_trainval2017.zip` (instances JSON)
-
-Arrange as COCO format and create `configs/my_data.yaml`:
-
-```yaml
-data_format: coco
-train_source: data/coco/annotations/instances_train2017.json
-val_source: data/coco/annotations/instances_val2017.json
-image_root: data/coco/images
-```
-
-(Tip: start with just `val2017` for train **and** val to shake out the full
-pipeline before committing to the 18 GB train set.)
-
-### B2. Train on COCO
+### B1. Get COCO (one command)
 
 ```bash
-python run_benchmarks.py --device cuda \
-    --data-config configs/my_data.yaml \
-    --variant s --epochs 100 --acc-size 640 \
-    --skip-latency --skip-structural
+python scripts/get_coco.py --classes person car --max-images 2000
 ```
 
-Move up to `--variant s` or `--variant ex` for higher accuracy on real data.
+Downloads COCO val2017 (~1 GB images + ~250 MB annotations, cached after the
+first run), keeps the classes you name, splits train/val, and writes
+`configs/coco.yaml`. Options:
 
-### B3. Detect on COCO images
+- `--classes person car ...` — focus on a few classes for a strong, fast result
+  (omit for all 80).
+- `--max-images 2000` — cap the image count for a quicker first run (omit for
+  the full 5,000).
+
+**PowerShell (one line):**
+
+```powershell
+python scripts\get_coco.py --classes person car --max-images 2000
+```
+
+### B2. Train on it
 
 ```bash
-python scripts/detect_sample.py --data-config configs/my_data.yaml --size 640 --limit 12
+python run_benchmarks.py --device cuda --data-config configs/coco.yaml --variant s --epochs 100 --acc-size 640 --skip-latency --skip-structural
 ```
+
+### B3. Detect / go live on the trained model
+
+```bash
+python scripts/detect_sample.py --data-config configs/coco.yaml --size 640 --limit 12
+python cv_detector.py --data-config configs/coco.yaml --size 640          # webcam
+```
+
+### Getting the accuracy up (the recipe that matters)
+
+More data + the right settings, in order of impact:
+
+1. **More images** — drop `--max-images`, or fewer `--classes`, so each class
+   has more examples. This is the biggest lever.
+2. **More epochs** — `--epochs 200`/`300`. Watch the loss bar keep falling.
+3. **Bigger model** — `--variant s` then `--variant ex` for more capacity.
+4. **Full resolution** — keep `--acc-size 640`.
+5. **Fewer classes** — a 1-3 class detector trained well beats a weak 80-class one.
+
+Train from scratch takes many epochs; the loss bar falling and mAP climbing
+across runs is the signal you're on track.
 
 ---
 

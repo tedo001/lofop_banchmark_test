@@ -64,8 +64,17 @@ python run_benchmarks.py --device cuda --amp --plots --skip-accuracy
 > split — that's bash; PowerShell uses a backtick `` ` ``). Do every `pip install`
 > and run in the **same** activated venv. See [INSTRUCTIONS.md](INSTRUCTIONS.md).
 
-Then point the same commands at the full COCO dataset with your own
-`configs/my_data.yaml`.
+### Then train on real quality data
+
+COCO128 is only a pipeline check. For real accuracy, grab 5,000 real COCO images
+(one command) and train the same way:
+
+```bash
+python scripts/get_coco.py --classes person car --max-images 2000
+python run_benchmarks.py --device cuda --data-config configs/coco.yaml --variant s --epochs 100 --acc-size 640 --skip-latency --skip-structural
+```
+
+See [INSTRUCTIONS.md](INSTRUCTIONS.md) Stage B for the full accuracy recipe.
 
 ## Other runs
 
@@ -118,6 +127,7 @@ run_benchmarks.py # CLI entry point -> results/
 cv_detector.py    # live detection: webcam / video / image, with FPS overlay
 scripts/
   get_coco128.py  # download COCO128 (optionally one class) as a COCO dataset
+  get_coco.py     # download real COCO val2017 (5,000 images) for quality training
   detect_sample.py # run the trained detector and draw boxes on sample images
 configs/          # dataset config template (+ generated coco128.yaml)
 results/          # committed md/CSV/JSON/PNG from the latest run
