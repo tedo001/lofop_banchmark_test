@@ -1,0 +1,12 @@
+# Dataset config for the accuracy benchmark. Copy to configs/my_data.yaml, edit
+# the paths, and run:
+#
+#   python run_benchmarks.py --device cuda --data-config configs/my_data.yaml \
+#       --variant s --epochs 50 --acc-size 640
+#
+# Supported formats: coco (annotation JSON), yolo (dataset root), voc (dataset root).
+
+data_format: coco
+train_source: data/annotations/instances_train.json
+val_source: data/annotations/instances_val.json
+image_root: data/images

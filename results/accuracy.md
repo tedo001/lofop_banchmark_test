@@ -1,6 +1,6 @@
 # LOFOP accuracy benchmark
 
-Variant `lofop-detect-n`, 30 CPU epochs at 96px on the synthetic `shapes` dataset (48 train / 16 val images, seed 0).
+Variant `lofop-detect-n` on `shapes (synthetic)`, 30 epochs at 96px on `cpu` (2 classes, seed 0).
 
 | Metric | Value |
 |---|---:|
@@ -9,5 +9,3 @@ Variant `lofop-detect-n`, 30 CPU epochs at 96px on the synthetic `shapes` datase
 | Precision | 0.3881 |
 | Recall | 0.8125 |
 | F1 | 0.5253 |
-
-Reproducible instrument on synthetic data, not a real-world accuracy claim.

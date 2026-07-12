@@ -1,0 +1,2 @@
+# Optional: charts for benchmark runs (python run_benchmarks.py --plots).
+matplotlib>=3.7

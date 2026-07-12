@@ -1,9 +1,10 @@
 {
   "variant": "n",
+  "dataset": "shapes (synthetic)",
+  "device": "cpu",
   "epochs": 30,
   "image_size": 96,
-  "train_images": 48,
-  "val_images": 16,
+  "num_classes": 2,
   "seed": 0,
   "map50": 0.5731150326630563,
   "map50_95": 0.34184475109178575,
