@@ -20,6 +20,8 @@ from lofop.core.config import Config
 from lofop.registries import HUB
 from lofop.utils import ModelReport, benchmark_model, render_table
 
+from lofop_bench.progress import ProgressBar
+
 # The variant configs ship inside the installed lofop package.
 _CONFIG_DIR = Path(lofop.models.__file__).resolve().parent.parent / "configs" / "lofop-detect"
 
@@ -78,7 +80,13 @@ def run_structural(
     output_dir: str | Path, *, image_size: int = 640, basename: str = "structural",
 ) -> list[ModelReport]:
     """Benchmark every variant and write ``structural.{md,csv,json}``."""
-    reports = [benchmark_variant(path, image_size=image_size) for path in variant_configs()]
+    variants = variant_configs()
+    bar = ProgressBar(len(variants), prefix="  structural")
+    reports = []
+    for index, path in enumerate(variants):
+        bar.update(index, f"benchmarking {path.stem}")
+        reports.append(benchmark_variant(path, image_size=image_size))
+    bar.finish()
     _write(reports, Path(output_dir), basename)
     return reports
 

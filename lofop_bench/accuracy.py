@@ -25,6 +25,8 @@ from lofop import Detector
 from lofop.data import load_dataset
 from lofop.data.synthetic import generate_shapes_dataset
 
+from lofop_bench.progress import TrainingProgress
+
 
 @dataclass(frozen=True)
 class AccuracyResult:
@@ -96,11 +98,12 @@ def run_accuracy(
         val = load_dataset(data_format, val_source or train_source, **kwargs)
         num_classes = len(val.categories)
         detector = Detector(variant, num_classes=num_classes, image_size=image_size, device=device)
-        detector.train(
-            data_format=data_format, train_source=train_source, val_source=val_source,
-            image_root=image_root, epochs=epochs, batch_size=batch_size, lr=lr,
-            workers=0, checkpoint_dir=output_dir / "checkpoints",
-        )
+        with TrainingProgress(epochs, prefix=f"  training {variant} on {dataset_name}"):
+            detector.train(
+                data_format=data_format, train_source=train_source, val_source=val_source,
+                image_root=image_root, epochs=epochs, batch_size=batch_size, lr=lr,
+                workers=0, checkpoint_dir=output_dir / "checkpoints",
+            )
     else:
         dataset_name = "shapes (synthetic)"
         workdir = output_dir / "_shapes_data"
@@ -112,10 +115,11 @@ def run_accuracy(
         )
         num_classes = len(train.categories)
         detector = Detector(variant, num_classes=num_classes, image_size=image_size, device=device)
-        detector.train(
-            train_data=train, val_data=val, epochs=epochs, batch_size=batch_size, lr=lr,
-            workers=0, checkpoint_dir=output_dir / "checkpoints",
-        )
+        with TrainingProgress(epochs, prefix=f"  training {variant} on {dataset_name}"):
+            detector.train(
+                train_data=train, val_data=val, epochs=epochs, batch_size=batch_size, lr=lr,
+                workers=0, checkpoint_dir=output_dir / "checkpoints",
+            )
 
     metrics = detector.evaluate(val)
     result = AccuracyResult(

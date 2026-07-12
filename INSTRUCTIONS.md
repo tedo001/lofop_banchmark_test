@@ -89,8 +89,10 @@ python run_benchmarks.py --device cuda \
 python run_benchmarks.py --device cuda --data-config configs\coco128.yaml --variant n --epochs 100 --acc-size 640 --skip-latency --skip-structural
 ```
 
-Writes `results/accuracy.md` / `.json` (mAP@50, mAP@50:95, precision, recall,
-F1) and saves the trained weights to `results/checkpoints/best.pt`.
+A live progress bar shows the epoch, current loss, and ETA while it trains, so
+you can see it working. It writes `results/accuracy.md` / `.json` (mAP@50,
+mAP@50:95, precision, recall, F1) and saves the trained weights to
+`results/checkpoints/best.pt`.
 
 > COCO128 is tiny (128 images) — it is for **verifying the pipeline works**, not
 > for high accuracy. Expect modest mAP; that is normal.

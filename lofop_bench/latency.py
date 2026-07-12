@@ -22,6 +22,8 @@ import lofop.models  # noqa: F401  (registers model components)
 from lofop.core.config import Config
 from lofop.registries import HUB
 
+from lofop_bench.progress import ProgressBar
+
 _CONFIG_DIR = Path(lofop.models.__file__).resolve().parent.parent / "configs" / "lofop-detect"
 
 
@@ -109,13 +111,18 @@ def run_latency(
     basename: str = "latency",
 ) -> list[LatencyResult]:
     """Benchmark latency for every variant and write ``latency.{md,json}``."""
-    results = [
-        benchmark_latency(
-            path, device=device, image_size=image_size,
-            batch_sizes=batch_sizes, amp=amp,
+    variants = variant_configs()
+    bar = ProgressBar(len(variants), prefix=f"  latency ({device})")
+    results = []
+    for index, path in enumerate(variants):
+        bar.update(index, f"timing {path.stem}")
+        results.append(
+            benchmark_latency(
+                path, device=device, image_size=image_size,
+                batch_sizes=batch_sizes, amp=amp,
+            )
         )
-        for path in variant_configs()
-    ]
+    bar.finish()
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / f"{basename}.json").write_text(
