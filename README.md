@@ -31,19 +31,34 @@ pip install -r requirements.txt
 pip install -r requirements-plots.txt   # optional charts
 ```
 
-## Run
+## Quick start: small COCO first
+
+The recommended path — verify everything on a 128-image COCO subset, then scale
+to full COCO (full walkthrough in [INSTRUCTIONS.md](INSTRUCTIONS.md)):
+
+```bash
+# 1. Get COCO128 (128 images, ~6 MB) and a ready config:
+python scripts/get_coco128.py
+
+# 2. Train + evaluate on it (GPU):
+python run_benchmarks.py --device cuda --data-config configs/coco128.yaml \
+    --variant n --epochs 100 --acc-size 640 --skip-latency --skip-structural
+
+# 3. SEE it detect - draws predicted boxes on val images -> results/detections/:
+python scripts/detect_sample.py --data-config configs/coco128.yaml --size 640
+```
+
+Then point the same commands at the full COCO dataset with your own
+`configs/my_data.yaml`.
+
+## Other runs
 
 ```bash
 # GPU speed check, FP16, with charts (no training):
 python run_benchmarks.py --device cuda --amp --skip-accuracy --plots
 
-# Full run on synthetic data:
-python run_benchmarks.py --device cuda --variant s --epochs 50 --acc-size 640 --plots
-
-# Accuracy on your own COCO/YOLO/VOC dataset:
-cp configs/coco.example.yaml configs/my_data.yaml   # edit paths
-python run_benchmarks.py --device cuda --data-config configs/my_data.yaml \
-    --variant s --epochs 100 --acc-size 640
+# Deterministic synthetic accuracy (no dataset needed):
+python run_benchmarks.py --device cuda --variant s --epochs 50 --acc-size 640
 ```
 
 See [INSTRUCTIONS.md](INSTRUCTIONS.md) for every flag and 4060-specific tips
@@ -82,7 +97,10 @@ lofop_bench/
   accuracy.py     # train + evaluate: synthetic or real COCO/YOLO/VOC
   plots.py        # optional matplotlib charts
 run_benchmarks.py # CLI entry point -> results/
-configs/          # dataset config template for the accuracy benchmark
+scripts/
+  get_coco128.py  # download COCO128 and arrange it for LOFOP
+  detect_sample.py # run the trained detector and draw boxes on sample images
+configs/          # dataset config template (+ generated coco128.yaml)
 results/          # committed md/CSV/JSON/PNG from the latest run
 .github/workflows/benchmark.yml  # CI regression guard (CPU)
 ```

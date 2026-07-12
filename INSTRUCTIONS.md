@@ -1,144 +1,183 @@
-# How to Run the LOFOP Benchmark System
+# LOFOP Benchmark — Step-by-Step (Small COCO First, Then Big)
 
-A step-by-step guide for your stack: **PyCharm** (edit/run) + **GitHub** (store
-code and results) + **Claude Code** (iterate), on your **RTX 4060 OMEN laptop**
-(CUDA GPU).
+A complete guide for your stack: **PyCharm** (edit/run) + **GitHub** (store code
+and results) + **Claude Code** (iterate), on your **RTX 4060 OMEN laptop**.
 
-The committed numbers in `results/` are a CPU reference. Run this on your 4060 to
-get real GPU latency, throughput, VRAM, and much faster accuracy training.
+The plan, in order:
 
----
+1. Set up the project and GPU.
+2. **Start small** — download **COCO128** (128 images, ~6 MB), train, evaluate,
+   and *see the detections*.
+3. **Scale up** — point the same commands at the full COCO dataset.
 
-## 0. What this measures
-
-| Benchmark | Output | Needs a GPU? |
-|---|---|---|
-| **environment** | the exact machine + versions | no |
-| **structural** | params, FLOPs, model size, forward FPS | no (GPU adds GPU FPS) |
-| **latency** | p50/p90/p99 latency, throughput per batch size, peak VRAM | GPU strongly recommended |
-| **accuracy** | mAP@50, mAP@50:95, precision, recall, F1 | works on CPU; GPU is far faster |
-
-Everything writes `results/*.md`, `*.csv`, `*.json` (+ optional `*.png` charts).
+Do Stage A end-to-end first. Only move to Stage B once you can see boxes on
+COCO128 images.
 
 ---
 
-## 1. One-time setup in PyCharm
+## 1. One-time setup (PyCharm)
 
-1. **Clone the repo.** PyCharm -> *Get from VCS* ->
-   `https://github.com/tedo001/lofop_banchmark_test` -> Clone.
-2. **Create a project virtualenv.** *Settings -> Project -> Python Interpreter ->
-   Add Interpreter -> Virtualenv (new)*, Python 3.10 or 3.11. PyCharm makes
-   `.venv/` (already git-ignored).
-3. **Open the built-in Terminal** (Alt+F12) — it auto-activates `.venv`.
+1. **Clone.** PyCharm → *Get from VCS* →
+   `https://github.com/tedo001/lofop_banchmark_test`.
+2. **Virtualenv.** *Settings → Project → Python Interpreter → Add → Virtualenv
+   (new)*, Python 3.10/3.11. PyCharm creates `.venv/` (git-ignored).
+3. **Terminal.** Open PyCharm's terminal (Alt+F12); `.venv` auto-activates.
 
-### Install PyTorch with CUDA (the important step for your 4060)
-
-Your RTX 4060 needs the CUDA build of PyTorch, **not** the default CPU wheel:
+### Install CUDA PyTorch for the 4060 (do this before `requirements.txt`)
 
 ```bash
 pip install torch --index-url https://download.pytorch.org/whl/cu121
-```
-
-Then install the harness (this pulls in LOFOP from GitHub):
-
-```bash
 pip install -r requirements.txt
-pip install -r requirements-plots.txt   # optional: charts
+pip install -r requirements-plots.txt   # optional charts
 ```
 
-### Verify the GPU is visible
+### Verify the GPU
 
 ```bash
 python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
-# expected: True NVIDIA GeForce RTX 4060 ...
-lofop doctor                                  # LOFOP's own environment check
+# expect: True NVIDIA GeForce RTX 4060 ...
+lofop doctor
 ```
 
-If it prints `False`, update your NVIDIA driver and reinstall the `cu121` wheel.
+If it prints `False`: update the NVIDIA driver, then reinstall the `cu121` wheel.
 
 ---
 
-## 2. Run a benchmark
+## Stage A — Start small with COCO128
 
-Use the PyCharm terminal (or make a *Run Configuration* for `run_benchmarks.py`).
+### A1. Download the small dataset (one command)
 
-### Quick GPU speed check (no training, ~1 minute)
+```bash
+python scripts/get_coco128.py
+```
+
+This downloads COCO128, splits it into train/val, arranges it as LOFOP YOLO
+roots under `data/coco128/`, and writes `configs/coco128.yaml`. (`data/` is
+git-ignored, so the dataset is not committed.)
+
+### A2. Train + evaluate on COCO128
+
+```bash
+python run_benchmarks.py --device cuda \
+    --data-config configs/coco128.yaml \
+    --variant n --epochs 100 --acc-size 640 \
+    --skip-latency --skip-structural
+```
+
+Writes `results/accuracy.md` / `.json` (mAP@50, mAP@50:95, precision, recall,
+F1) and saves the trained weights to `results/checkpoints/best.pt`.
+
+> COCO128 is tiny (128 images) — it is for **verifying the pipeline works**, not
+> for high accuracy. Expect modest mAP; that is normal.
+
+### A3. See it detect (the important part)
+
+```bash
+python scripts/detect_sample.py --data-config configs/coco128.yaml --size 640
+```
+
+This runs `results/checkpoints/best.pt` on a handful of COCO128 val images and
+writes pictures with the predicted boxes drawn on them to
+`results/detections/`. Open them in PyCharm — this is your proof the detector
+trained and detects.
+
+Raise/lower `--score-threshold` (default 0.25) to show fewer/more boxes.
+
+### A4. (Optional) full speed benchmark on the GPU
 
 ```bash
 python run_benchmarks.py --device cuda --amp --skip-accuracy --plots
 ```
 
-Gives you structural metrics + GPU latency/throughput/VRAM for all three
-variants, at FP16 (`--amp`), plus charts in `results/`.
+Structural metrics + GPU latency (p50/p90/p99), throughput per batch size, and
+peak VRAM for all variants, with charts in `results/`.
 
-### Full run including accuracy
+### A5. Save results to GitHub (PyCharm)
 
-On synthetic data (deterministic, no dataset needed):
+Commit the changed `results/*.md/.json/.png` (Ctrl+K) and push (Ctrl+Shift+K).
+The dataset, checkpoints, and detection images stay local (git-ignored); the
+*numbers* go to GitHub.
 
-```bash
-python run_benchmarks.py --device cuda --variant s --epochs 50 --acc-size 640 --plots
+---
+
+## Stage B — Scale to the full COCO dataset
+
+Once Stage A works, use the **same commands** against full COCO.
+
+### B1. Get COCO 2017
+
+Download from https://cocodataset.org (or use a mirror):
+
+- `train2017.zip` (~18 GB) and/or `val2017.zip` (~1 GB)
+- `annotations_trainval2017.zip` (instances JSON)
+
+Arrange as COCO format and create `configs/my_data.yaml`:
+
+```yaml
+data_format: coco
+train_source: data/coco/annotations/instances_train2017.json
+val_source: data/coco/annotations/instances_val2017.json
+image_root: data/coco/images
 ```
 
-On **your own COCO/YOLO/VOC dataset** (real mAP):
+(Tip: start with just `val2017` for train **and** val to shake out the full
+pipeline before committing to the 18 GB train set.)
+
+### B2. Train on COCO
 
 ```bash
-cp configs/coco.example.yaml configs/my_data.yaml
-# edit configs/my_data.yaml with your paths, then:
-python run_benchmarks.py --device cuda --data-config configs/my_data.yaml \
-    --variant s --epochs 100 --acc-size 640 --plots
+python run_benchmarks.py --device cuda \
+    --data-config configs/my_data.yaml \
+    --variant s --epochs 100 --acc-size 640 \
+    --skip-latency --skip-structural
 ```
 
-### Useful flags
+Move up to `--variant s` or `--variant ex` for higher accuracy on real data.
 
-| Flag | Meaning |
-|---|---|
-| `--device cuda\|cpu\|auto` | where to run (`auto` picks the GPU if present) |
-| `--amp` | FP16 mixed precision for the latency benchmark (faster on RTX) |
-| `--size 640` | resolution for structural + latency |
-| `--batch-sizes 1,4,8,16` | batch sizes for the latency/throughput sweep |
-| `--variant n\|s\|ex` | which model the accuracy run trains |
-| `--epochs 100` | accuracy training length |
-| `--acc-size 640` | accuracy training/eval resolution |
-| `--data-config FILE` | dataset YAML (COCO/YOLO/VOC) for real accuracy |
-| `--plots` | render PNG charts (needs matplotlib) |
-| `--skip-structural / --skip-latency / --skip-accuracy` | run a subset |
+### B3. Detect on COCO images
 
-> **4060 tip (8 GB VRAM):** start with `--batch-sizes 1,4,8,16 --amp`. If you hit
-> a CUDA out-of-memory error on `ex` at 640px, drop to `--batch-sizes 1,4,8` or
-> `--size 512`. `results/latency.md` reports peak VRAM so you can see headroom.
+```bash
+python scripts/detect_sample.py --data-config configs/my_data.yaml --size 640 --limit 12
+```
 
 ---
 
-## 3. Save results back to GitHub (in PyCharm)
+## RTX 4060 tips (8 GB VRAM)
 
-The `results/` files are meant to be committed so your GPU numbers live in the
-repo history.
-
-1. PyCharm *Commit* tab (Ctrl+K): stage the changed `results/*` files.
-2. Message e.g. `RTX 4060 benchmark run`.
-3. *Push* (Ctrl+Shift+K).
-
-Now `README.md` / `results/` show your real hardware numbers on GitHub.
-
----
-
-## 4. Iterate with Claude Code
-
-From the repo root (or the Claude Code panel in your IDE), ask for changes like:
-
-- "Add a batch-size 32 column and re-run the latency benchmark on cuda."
-- "Point the accuracy benchmark at my VOC dataset in `configs/my_data.yaml`."
-- "Add a chart comparing FP16 vs FP32 latency."
-- "The `ex` variant OOMs at 640 — add an automatic batch-size fallback."
-
-Claude Code edits the harness, you run it on the 4060 in PyCharm, then commit the
-new `results/` — a tight edit -> measure -> commit loop across the three tools.
+- Start with defaults. If you hit **CUDA out of memory**, in order: lower
+  `--acc-size` (640 → 512), reduce the model (`ex` → `s` → `n`), or (for the
+  latency benchmark) shrink `--batch-sizes`.
+- `results/latency.md` reports **peak VRAM** so you can see headroom.
+- `--amp` (mixed precision) is faster and uses less VRAM on RTX cards; training
+  already uses AMP automatically on CUDA.
+- Full-COCO training is long. Do a few epochs first to confirm loss is falling,
+  then leave a full run going.
 
 ---
 
-## 5. Continuous benchmarking (optional)
+## Iterate with Claude Code
 
-`.github/workflows/benchmark.yml` runs the suite on every push and weekly on
-GitHub's CPU runners (structural + synthetic accuracy), uploading `results/` as
-an artifact. GitHub-hosted runners have no GPU, so treat CI as a *regression
-guard* and your 4060 as the source of real speed/accuracy numbers.
+Ask for changes in natural language, e.g.:
+
+- "Add a batch-size 16 and 32 column to the latency benchmark."
+- "Train `s` on COCO for 300 epochs and add a mAP-vs-epoch chart."
+- "`ex` OOMs at 640 — add an automatic batch-size fallback."
+- "Also report per-class AP for the COCO run."
+
+Claude Code edits the harness → you run it on the 4060 in PyCharm → commit the
+new `results/`. Tight edit → measure → commit loop across all three tools.
+
+---
+
+## Command cheat-sheet
+
+```bash
+python scripts/get_coco128.py                                   # get small dataset
+python run_benchmarks.py --device cuda --data-config configs/coco128.yaml \
+    --variant n --epochs 100 --acc-size 640 --skip-latency --skip-structural   # train+eval
+python scripts/detect_sample.py --data-config configs/coco128.yaml --size 640  # see boxes
+python run_benchmarks.py --device cuda --amp --skip-accuracy --plots           # GPU speed
+```
+
+CI (`.github/workflows/benchmark.yml`) runs a fast CPU subset on push/weekly as
+a regression guard; your 4060 is the source of real speed/accuracy numbers.

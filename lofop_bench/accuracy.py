@@ -99,7 +99,7 @@ def run_accuracy(
         detector.train(
             data_format=data_format, train_source=train_source, val_source=val_source,
             image_root=image_root, epochs=epochs, batch_size=batch_size, lr=lr,
-            workers=0, checkpoint_dir=output_dir / "_run",
+            workers=0, checkpoint_dir=output_dir / "checkpoints",
         )
     else:
         dataset_name = "shapes (synthetic)"
@@ -114,7 +114,7 @@ def run_accuracy(
         detector = Detector(variant, num_classes=num_classes, image_size=image_size, device=device)
         detector.train(
             train_data=train, val_data=val, epochs=epochs, batch_size=batch_size, lr=lr,
-            workers=0, checkpoint_dir=output_dir / "_run",
+            workers=0, checkpoint_dir=output_dir / "checkpoints",
         )
 
     metrics = detector.evaluate(val)
