@@ -1,0 +1,6 @@
+# The LOFOP framework under test. Pin to the development branch; switch to a
+# released version (e.g. lofop==0.1.3) once published to PyPI.
+lofop[models] @ git+https://github.com/tedo001/LOFOP.git@tedo
+
+# CPU PyTorch is enough for this harness; install a CUDA build to get GPU FPS.
+torch>=2.0

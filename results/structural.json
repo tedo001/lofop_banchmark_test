@@ -1,0 +1,47 @@
+[
+  {
+    "name": "lofop-detect-ex",
+    "parameters": 20120785,
+    "flops": 83242137600,
+    "flops_g": 83.2421,
+    "size_mb": 80.6937,
+    "cpu_fps": 2.935,
+    "gpu_fps": null,
+    "peak_rss_mb": 763.8,
+    "map50": null,
+    "map50_95": null,
+    "precision": null,
+    "recall": null,
+    "f1": null
+  },
+  {
+    "name": "lofop-detect-n",
+    "parameters": 1306129,
+    "flops": 6540748800,
+    "flops_g": 6.5407,
+    "size_mb": 5.2528,
+    "cpu_fps": 24.143,
+    "gpu_fps": null,
+    "peak_rss_mb": 763.8,
+    "map50": null,
+    "map50_95": null,
+    "precision": null,
+    "recall": null,
+    "f1": null
+  },
+  {
+    "name": "lofop-detect-s",
+    "parameters": 3844297,
+    "flops": 15928396800,
+    "flops_g": 15.9284,
+    "size_mb": 15.4472,
+    "cpu_fps": 11.523,
+    "gpu_fps": null,
+    "peak_rss_mb": 763.8,
+    "map50": null,
+    "map50_95": null,
+    "precision": null,
+    "recall": null,
+    "f1": null
+  }
+]

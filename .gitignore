@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Benchmark scratch (training data / checkpoints written during a run)
+results/_shapes_data/
+results/_run/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
