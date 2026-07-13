@@ -115,20 +115,28 @@ def _steps_per_epoch(num_images: int, batch_size: int) -> int:
 
 
 def _train_with_progress(detector, progress, train_kwargs) -> None:
-    """Run ``detector.train`` with a forward hook feeding batch-level progress.
+    """Run ``detector.train`` with per-batch loss feeding the training log.
 
-    The hook goes on the backbone: ``compute_losses`` invokes ``self.forward``
-    directly (bypassing module ``__call__`` hooks on the detector itself), but
-    the backbone runs through ``__call__`` exactly once per training batch.
-    Per-epoch evaluation uses the EMA deepcopy, so eval forwards are not
-    counted -- the bar shows a true ``batch i/N`` fill from the first epoch.
+    Wraps the model's ``compute_losses`` (called exactly once per training
+    batch) so iteration lines show the real batch loss. Per-epoch evaluation
+    runs on the EMA deepcopy, so eval passes are not counted. The wrapper only
+    converts the loss tensor on the iterations that print, so there is no
+    per-batch GPU sync overhead between logs.
     """
-    hook = detector.model.backbone.register_forward_hook(lambda *_: progress.on_batch())
+    model = detector.model
+    original = model.compute_losses
+
+    def instrumented(images, targets):
+        losses = original(images, targets)
+        progress.on_batch(losses["total"].detach())
+        return losses
+
+    model.compute_losses = instrumented
     try:
         with progress:
             detector.train(**train_kwargs)
     finally:
-        hook.remove()
+        del model.compute_losses  # drop the instance shadow; class method returns
 
 
 def run_accuracy(

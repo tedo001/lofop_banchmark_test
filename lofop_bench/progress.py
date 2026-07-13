@@ -1,13 +1,13 @@
-"""Simple, dependency-free progress bars for benchmark runs.
+"""Simple, dependency-free progress reporting for benchmark runs.
 
-Prints a carriage-return-updating bar to stderr (so it never pollutes the
-markdown/JSON that goes to stdout). Two helpers:
+Prints to stderr (so it never pollutes the markdown/JSON on stdout). Two
+helpers:
 
 * :class:`ProgressBar` -- a generic ``current/total`` bar with elapsed/ETA.
-* :class:`TrainingProgress` -- a context manager that shows a live per-epoch
-  bar during ``Detector.train`` by listening to LOFOP's ``train.epoch_end``
-  event, so you get feedback through the long training step without touching
-  the framework.
+* :class:`TrainingProgress` -- a context manager producing a classic training
+  log during ``Detector.train``: periodic ``Training: Epoch[e/E]
+  Iteration[i/N] Loss: x`` lines, a live tqdm-style overall progress line, one
+  summary line per epoch, and a boxed "Training Finished" report at the end.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from __future__ import annotations
 import sys
 import threading
 import time
+from datetime import datetime
 from typing import TextIO
 
 
@@ -62,43 +63,63 @@ class ProgressBar:
 
 
 class TrainingProgress:
-    """Context manager: per-epoch training log driven by LOFOP events.
+    """Classic training log, driven by LOFOP events plus a per-batch callback.
 
-    Subscribes to the framework event bus' ``train.epoch_end`` topic, so it
-    reflects real training progress without the harness knowing the trainer's
-    internals. Prints one line per finished epoch (loss, mAP, epoch time,
-    elapsed, ETA). Between epochs a background thread animates a live bar a few
-    times a second so a long epoch never looks frozen: a bouncing bar during the
-    first epoch (unknown length) and an estimated-percent fill afterwards (once
-    the previous epoch's duration is known).
+    Output shape (all on stderr)::
+
+        Training: Epoch[001/020] Iteration[050/250] Loss: 2.8413
+        Training: Epoch[001/020] Iteration[100/250] Loss: 2.6120
+        Epoch[001/020] Train loss: 2.5107  mAP@50: 0.0123  mAP@50:95: 0.0031  time: 41.2s
+        Training Progress:  5%|#-----------------------| 1/20 [41s<13.0m, 41.2s/it, loss=2.5107, mAP50=0.0123]
+        ...
+        =============== Training Finished ===============
+        Finished Time       : 07-15_12-30
+        Best mAP@50         : 0.3125
+        Best Epoch          : 18
+        Total Training Time : 1234.56 sec (20.58 min)
+        =================================================
+
+    Epoch summaries come from the ``train.epoch_end`` event; iteration lines
+    come from :meth:`on_batch` (wired to the model's loss computation by the
+    harness), so the loss shown is the real per-batch training loss. A
+    background thread keeps the overall progress line alive between prints and
+    flags the per-epoch validation phase.
     """
 
-    _SPINNER = "|/-\\"
-    _BAR_WIDTH = 22
-    _BLOCK = 4
+    _BAR_WIDTH = 24
 
     def __init__(
-        self, total_epochs: int, *, prefix: str = "training", interval: float = 0.2,
-        steps_per_epoch: int | None = None, stream: TextIO | None = None,
+        self, total_epochs: int, *, prefix: str = "training", interval: float = 0.25,
+        steps_per_epoch: int | None = None, log_every: int | None = None,
+        stream: TextIO | None = None,
     ) -> None:
         self.total = max(int(total_epochs), 1)
         self.prefix = prefix
         self.interval = interval
         self.steps_per_epoch = steps_per_epoch
+        if log_every is None:
+            # Match the classic look (every 50 iterations) but stay useful on
+            # small runs by logging ~5 times per short epoch.
+            if steps_per_epoch and steps_per_epoch <= 50:
+                log_every = max(steps_per_epoch // 5, 1)
+            else:
+                log_every = 50
+        self.log_every = max(int(log_every), 1)
         self.stream = stream or sys.stderr
         self._subscription = None
         self._events = None
         self._start = 0.0
         self._last_epoch_time = 0.0
-        self._est_epoch = 0.0  # duration of the last finished epoch, for the estimate
         self._completed = 0
-        self._batches = 0  # forwards seen in the current epoch (via on_batch)
+        self._batches = 0
+        self._last_loss: float | None = None
+        self._last_map: float | None = None
+        self._best_map: float | None = None
+        self._best_epoch: int | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
-    def on_batch(self) -> None:
-        """Notify that one training batch finished (wired via a forward hook)."""
-        self._batches += 1
+    # -- wiring ------------------------------------------------------------
 
     def __enter__(self) -> TrainingProgress:
         from lofop.registries import EVENTS
@@ -106,78 +127,103 @@ class TrainingProgress:
         self._events = EVENTS
         self._start = self._last_epoch_time = time.perf_counter()
         self._subscription = EVENTS.subscribe("train.epoch_end", self._on_epoch_end)
-        print(
-            f"{self.prefix}: {self.total} epochs (one line per epoch; live bar below)",
-            file=self.stream,
-        )
+        steps = f" x {self.steps_per_epoch} iterations" if self.steps_per_epoch else ""
+        print(f"{self.prefix}: {self.total} epochs{steps}", file=self.stream)
         self._thread = threading.Thread(target=self._beat, daemon=True)
         self._thread.start()
         return self
 
-    def _indeterminate_bar(self, tick: int) -> str:
-        """A block bouncing left<->right, so it visibly moves without a known %."""
-        span = self._BAR_WIDTH - self._BLOCK
-        cycle = tick % (2 * span or 1)
-        pos = cycle if cycle <= span else 2 * span - cycle
-        return "-" * pos + "#" * self._BLOCK + "-" * (span - pos)
+    def on_batch(self, loss=None) -> None:
+        """Record one finished training batch; log every ``log_every`` batches.
 
-    def _estimated_bar(self, fraction: float) -> str:
-        filled = int(min(fraction, 1.0) * self._BAR_WIDTH)
-        return "#" * filled + "-" * (self._BAR_WIDTH - filled)
+        ``loss`` may be a tensor; it is only converted (a GPU sync) on the
+        batches that actually print, so overhead between logs is nil.
+        """
+        self._batches += 1
+        at_log = self._batches % self.log_every == 0
+        at_end = self.steps_per_epoch is not None and self._batches == self.steps_per_epoch
+        if not (at_log or at_end):
+            return
+        if loss is not None:
+            self._last_loss = float(loss)
+        total_str = f"{self.steps_per_epoch:03d}" if self.steps_per_epoch else "???"
+        loss_str = f" Loss: {self._last_loss:.4f}" if self._last_loss is not None else ""
+        self._clear_line()
+        print(
+            f"Training: Epoch[{self._completed + 1:03d}/{self.total:03d}] "
+            f"Iteration[{self._batches:03d}/{total_str}]{loss_str}",
+            file=self.stream,
+        )
+
+    # -- rendering ----------------------------------------------------------
+
+    def _clear_line(self) -> None:
+        self.stream.write("\r" + " " * 110 + "\r")
+
+    def _progress_line(self) -> str:
+        now = time.perf_counter()
+        elapsed = now - self._start
+        if self.steps_per_epoch:
+            in_epoch = min(self._batches / self.steps_per_epoch, 1.0)
+        else:
+            in_epoch = 0.0
+        overall = min((self._completed + in_epoch) / self.total, 1.0)
+        filled = int(overall * self._BAR_WIDTH)
+        bar = "#" * filled + "-" * (self._BAR_WIDTH - filled)
+        if self._completed:
+            per_epoch = (self._last_epoch_time - self._start) / self._completed
+            remaining = max(per_epoch * (self.total - self._completed - in_epoch), 0.0)
+            timing = f"[{format_duration(elapsed)}<{format_duration(remaining)}, {per_epoch:.1f}s/it"
+        else:
+            timing = f"[{format_duration(elapsed)}<?, ?s/it"
+        postfix = ""
+        if self._last_loss is not None:
+            postfix += f", loss={self._last_loss:.4f}"
+        if self._last_map is not None:
+            postfix += f", mAP50={self._last_map:.4f}"
+        evaluating = (
+            "  evaluating val ..."
+            if self.steps_per_epoch and self._batches >= self.steps_per_epoch
+            else ""
+        )
+        return (
+            f"Training Progress: {overall * 100:3.0f}%|{bar}| "
+            f"{self._completed}/{self.total} {timing}{postfix}]{evaluating}"
+        )
 
     def _beat(self) -> None:
-        tick = 0
         while not self._stop.wait(self.interval):
-            tick += 1
-            spin = self._SPINNER[tick % len(self._SPINNER)]
-            in_epoch = time.perf_counter() - self._last_epoch_time
-            if self.steps_per_epoch:  # true progress: batches done this epoch
-                done = min(self._batches, self.steps_per_epoch)
-                if done >= self.steps_per_epoch:
-                    # Batches finished; the trainer is now evaluating the val
-                    # set + checkpointing, which can dwarf the training time
-                    # when val is large -- say so instead of sitting at 100%.
-                    body = f"[{self._estimated_bar(1.0)}] evaluating val set ..."
-                else:
-                    fraction = done / self.steps_per_epoch
-                    body = (
-                        f"[{self._estimated_bar(fraction)}] {fraction * 100:4.1f}%  "
-                        f"batch {done}/{self.steps_per_epoch}"
-                    )
-            elif self._est_epoch > 0:  # estimate from the last epoch's duration
-                fraction = in_epoch / self._est_epoch
-                body = f"[{self._estimated_bar(fraction)}] ~{min(fraction, 0.999) * 100:4.1f}%"
-            else:  # unknown length -> animated bounce
-                body = f"[{self._indeterminate_bar(tick)}]"
-            self.stream.write(
-                f"\r  {spin} epoch {self._completed + 1}/{self.total}  {body}  "
-                f"{format_duration(in_epoch)}   "
-            )
+            self.stream.write("\r" + self._progress_line() + "   ")
             self.stream.flush()
+
+    # -- events --------------------------------------------------------------
 
     def _on_epoch_end(self, event) -> None:
         now = time.perf_counter()
         self._completed = int(event.get("epoch", 0)) + 1
         epoch_time = now - self._last_epoch_time
         self._last_epoch_time = now
-        self._est_epoch = epoch_time  # use the last epoch's time to estimate the next
-        self._batches = 0  # new epoch starts counting from zero
-        elapsed = now - self._start
-        eta = (elapsed / self._completed) * (self.total - self._completed)
+        self._batches = 0
         loss = event.get("loss")
-        metrics = event.get("metrics") or {}
-        parts = [f"Epoch {self._completed:>3}/{self.total}"]
         if loss is not None:
-            parts.append(f"loss {loss:.4f}")
-        if metrics.get("map50") is not None:
-            parts.append(f"mAP50 {metrics['map50']:.4f}")
-        parts += [
-            f"epoch {format_duration(epoch_time)}",
-            f"elapsed {format_duration(elapsed)}",
-            f"ETA {format_duration(eta)}",
-        ]
-        self.stream.write("\r" + " " * 100 + "\r")  # clear the heartbeat line
-        print("  " + "   ".join(parts), file=self.stream)
+            self._last_loss = float(loss)
+        metrics = event.get("metrics") or {}
+        map50 = metrics.get("map50")
+        map50_95 = metrics.get("map50_95")
+        if map50 is not None:
+            self._last_map = float(map50)
+            if self._best_map is None or self._last_map > self._best_map:
+                self._best_map, self._best_epoch = self._last_map, self._completed
+        parts = [f"Epoch[{self._completed:03d}/{self.total:03d}]"]
+        if loss is not None:
+            parts.append(f"Train loss: {loss:.4f}")
+        if map50 is not None:
+            parts.append(f"mAP@50: {map50:.4f}")
+        if map50_95 is not None:
+            parts.append(f"mAP@50:95: {map50_95:.4f}")
+        parts.append(f"time: {format_duration(epoch_time)}")
+        self._clear_line()
+        print("  ".join(parts), file=self.stream)
 
     def __exit__(self, *exc_info) -> None:
         self._stop.set()
@@ -185,8 +231,17 @@ class TrainingProgress:
             self._thread.join(timeout=1.0)
         if self._subscription is not None and self._events is not None:
             self._events.unsubscribe(self._subscription)
-        self.stream.write("\r" + " " * 100 + "\r")
-        print(
-            f"  {self.prefix}: done in {format_duration(time.perf_counter() - self._start)}",
-            file=self.stream,
+        total_seconds = time.perf_counter() - self._start
+        self._clear_line()
+        lines = [
+            "=============== Training Finished ===============",
+            f"Finished Time       : {datetime.now().strftime('%m-%d_%H-%M')}",
+        ]
+        if self._best_map is not None:
+            lines.append(f"Best mAP@50         : {self._best_map:.4f}")
+            lines.append(f"Best Epoch          : {self._best_epoch}")
+        lines.append(
+            f"Total Training Time : {total_seconds:.2f} sec ({total_seconds / 60:.2f} min)"
         )
+        lines.append("=================================================")
+        print("\n".join(lines), file=self.stream)
