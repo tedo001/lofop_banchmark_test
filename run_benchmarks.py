@@ -60,6 +60,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--acc-size", type=int, default=96, help="accuracy training resolution")
     parser.add_argument("--batch-size", type=int, default=8, help="accuracy training batch size")
     parser.add_argument("--lr", type=float, default=0.01, help="accuracy training learning rate")
+    parser.add_argument(
+        "--workers", type=int, default=0,
+        help="DataLoader workers; raise (e.g. 8) to speed up loading on big datasets",
+    )
     parser.add_argument("--data-config", type=Path, default=None,
                         help="YAML with data_format/train_source/val_source/image_root")
     parser.add_argument("--data-format", default=None)
@@ -106,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
         accuracy_result = run_accuracy(
             args.results_dir, variant=args.variant, device=device, epochs=args.epochs,
             image_size=args.acc_size, batch_size=args.batch_size, lr=args.lr,
-            data_format=data_format, train_source=train_source,
+            workers=args.workers, data_format=data_format, train_source=train_source,
             val_source=val_source, image_root=image_root,
         )
         print(accuracy_result.to_markdown())

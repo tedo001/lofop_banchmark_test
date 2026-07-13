@@ -106,6 +106,7 @@ def run_accuracy(
     image_size: int = 96,
     batch_size: int = 8,
     lr: float = 0.01,
+    workers: int = 0,
     seed: int = 0,
     # Real-dataset mode (all four together); omit to use synthetic shapes.
     data_format: str | None = None,
@@ -134,7 +135,7 @@ def run_accuracy(
             detector.train(
                 data_format=data_format, train_source=train_source, val_source=val_source,
                 image_root=image_root, epochs=epochs, batch_size=batch_size, lr=lr,
-                workers=0, checkpoint_dir=output_dir / "checkpoints",
+                workers=workers, checkpoint_dir=output_dir / "checkpoints",
             )
     else:
         dataset_name = "shapes (synthetic)"
@@ -150,7 +151,7 @@ def run_accuracy(
         with history, TrainingProgress(epochs, prefix=f"  training {variant} on {dataset_name}"):
             detector.train(
                 train_data=train, val_data=val, epochs=epochs, batch_size=batch_size, lr=lr,
-                workers=0, checkpoint_dir=output_dir / "checkpoints",
+                workers=workers, checkpoint_dir=output_dir / "checkpoints",
             )
 
     metrics = detector.evaluate(val)

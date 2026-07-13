@@ -233,6 +233,12 @@ them yourself.
   already uses AMP automatically on CUDA.
 - Full-COCO training is long. Do a few epochs first to confirm loss is falling,
   then leave a full run going.
+- **Speed up data loading with `--workers`.** By default loading is
+  single-process (slow on big datasets — a single epoch can take many minutes).
+  Add `--workers 8` so images load in parallel; this often cuts epoch time
+  several-fold. The run now prints **one line per epoch** (loss, mAP, epoch
+  time, ETA) plus a heartbeat while an epoch is in progress, so after epoch 1
+  finishes you know the total time.
 
 ---
 

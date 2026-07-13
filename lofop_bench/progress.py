@@ -13,8 +13,18 @@ markdown/JSON that goes to stdout). Two helpers:
 from __future__ import annotations
 
 import sys
+import threading
 import time
 from typing import TextIO
+
+
+def format_duration(seconds: float) -> str:
+    """Human-readable duration: ``45s`` / ``6.4m`` / ``2.1h``."""
+    if seconds < 90:
+        return f"{seconds:.0f}s"
+    if seconds < 5400:
+        return f"{seconds / 60:.1f}m"
+    return f"{seconds / 3600:.1f}h"
 
 
 class ProgressBar:
@@ -52,32 +62,88 @@ class ProgressBar:
 
 
 class TrainingProgress:
-    """Context manager: live per-epoch bar driven by LOFOP training events.
+    """Context manager: per-epoch training log driven by LOFOP events.
 
     Subscribes to the framework event bus' ``train.epoch_end`` topic, so it
     reflects real training progress without the harness knowing the trainer's
-    internals. Safe if events never fire (the bar just stays at 0).
+    internals. Prints one line per finished epoch (loss, mAP, epoch time,
+    elapsed, ETA), and -- because a single epoch on a large dataset can run for
+    many minutes -- a lightweight heartbeat every ``heartbeat`` seconds so you
+    can see it is alive and how long the current epoch is taking, instead of a
+    bar that looks frozen until the first epoch ends.
     """
 
-    def __init__(self, total_epochs: int, *, prefix: str = "  training") -> None:
-        self.bar = ProgressBar(total_epochs, prefix=prefix)
+    def __init__(
+        self, total_epochs: int, *, prefix: str = "training", heartbeat: float = 15.0,
+        stream: TextIO | None = None,
+    ) -> None:
+        self.total = max(int(total_epochs), 1)
+        self.prefix = prefix
+        self.heartbeat = heartbeat
+        self.stream = stream or sys.stderr
         self._subscription = None
         self._events = None
+        self._start = 0.0
+        self._last_epoch_time = 0.0
+        self._completed = 0
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
 
     def __enter__(self) -> TrainingProgress:
         from lofop.registries import EVENTS
 
         self._events = EVENTS
+        self._start = self._last_epoch_time = time.perf_counter()
         self._subscription = EVENTS.subscribe("train.epoch_end", self._on_epoch_end)
-        self.bar.update(0, "starting")
+        print(
+            f"{self.prefix}: {self.total} epochs "
+            f"(one line per epoch; heartbeat every {self.heartbeat:.0f}s)",
+            file=self.stream,
+        )
+        self._thread = threading.Thread(target=self._beat, daemon=True)
+        self._thread.start()
         return self
 
+    def _beat(self) -> None:
+        while not self._stop.wait(self.heartbeat):
+            elapsed = time.perf_counter() - self._start
+            in_epoch = time.perf_counter() - self._last_epoch_time
+            self.stream.write(
+                f"\r  ...epoch {self._completed + 1}/{self.total} running  "
+                f"(this epoch {format_duration(in_epoch)}, total {format_duration(elapsed)})   "
+            )
+            self.stream.flush()
+
     def _on_epoch_end(self, event) -> None:
-        epoch = int(event.get("epoch", 0)) + 1
+        now = time.perf_counter()
+        self._completed = int(event.get("epoch", 0)) + 1
+        epoch_time = now - self._last_epoch_time
+        self._last_epoch_time = now
+        elapsed = now - self._start
+        eta = (elapsed / self._completed) * (self.total - self._completed)
         loss = event.get("loss")
-        self.bar.update(epoch, f"loss={loss:.4f}" if loss is not None else "")
+        metrics = event.get("metrics") or {}
+        parts = [f"Epoch {self._completed:>3}/{self.total}"]
+        if loss is not None:
+            parts.append(f"loss {loss:.4f}")
+        if metrics.get("map50") is not None:
+            parts.append(f"mAP50 {metrics['map50']:.4f}")
+        parts += [
+            f"epoch {format_duration(epoch_time)}",
+            f"elapsed {format_duration(elapsed)}",
+            f"ETA {format_duration(eta)}",
+        ]
+        self.stream.write("\r" + " " * 78 + "\r")  # clear the heartbeat line
+        print("  " + "   ".join(parts), file=self.stream)
 
     def __exit__(self, *exc_info) -> None:
-        self.bar.finish("training complete")
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
         if self._subscription is not None and self._events is not None:
             self._events.unsubscribe(self._subscription)
+        self.stream.write("\r" + " " * 78 + "\r")
+        print(
+            f"  {self.prefix}: done in {format_duration(time.perf_counter() - self._start)}",
+            file=self.stream,
+        )
