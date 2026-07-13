@@ -251,13 +251,21 @@ taking hours, pull these levers (each is a big cut):
 | `--acc-size` | `640` | `416` or `320` |
 | `--epochs` | `60` | `20` (get a first number, then decide) |
 | `--limit-train-images` | all | `2000` (fewer images per epoch) |
+| `--limit-val-images` | all | `500` (faster per-epoch evaluation) |
 | `--workers` | `0` | `8` (parallel loading) |
+
+**Cap the val set too.** After every epoch the trainer evaluates the whole
+validation set; with thousands of val images and many classes that evaluation
+can take longer than the epoch itself (the bar shows `evaluating val set ...`
+during this phase). `--limit-val-images 500` keeps eval fast without changing
+what is measured.
 
 **Fast first run (minutes, not hours):**
 
 ```bash
 python run_benchmarks.py --device cuda --data-config configs/coco.yaml \
-    --variant n --acc-size 416 --epochs 20 --limit-train-images 2000 --workers 8 \
+    --variant n --acc-size 416 --epochs 20 \
+    --limit-train-images 2000 --limit-val-images 500 --workers 8 \
     --skip-latency --skip-structural --plots
 ```
 

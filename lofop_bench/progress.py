@@ -133,11 +133,17 @@ class TrainingProgress:
             in_epoch = time.perf_counter() - self._last_epoch_time
             if self.steps_per_epoch:  # true progress: batches done this epoch
                 done = min(self._batches, self.steps_per_epoch)
-                fraction = done / self.steps_per_epoch
-                body = (
-                    f"[{self._estimated_bar(fraction)}] {fraction * 100:4.1f}%  "
-                    f"batch {done}/{self.steps_per_epoch}"
-                )
+                if done >= self.steps_per_epoch:
+                    # Batches finished; the trainer is now evaluating the val
+                    # set + checkpointing, which can dwarf the training time
+                    # when val is large -- say so instead of sitting at 100%.
+                    body = f"[{self._estimated_bar(1.0)}] evaluating val set ..."
+                else:
+                    fraction = done / self.steps_per_epoch
+                    body = (
+                        f"[{self._estimated_bar(fraction)}] {fraction * 100:4.1f}%  "
+                        f"batch {done}/{self.steps_per_epoch}"
+                    )
             elif self._est_epoch > 0:  # estimate from the last epoch's duration
                 fraction = in_epoch / self._est_epoch
                 body = f"[{self._estimated_bar(fraction)}] ~{min(fraction, 0.999) * 100:4.1f}%"
