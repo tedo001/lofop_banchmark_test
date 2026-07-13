@@ -67,24 +67,29 @@ class TrainingProgress:
     Subscribes to the framework event bus' ``train.epoch_end`` topic, so it
     reflects real training progress without the harness knowing the trainer's
     internals. Prints one line per finished epoch (loss, mAP, epoch time,
-    elapsed, ETA), and -- because a single epoch on a large dataset can run for
-    many minutes -- a lightweight heartbeat every ``heartbeat`` seconds so you
-    can see it is alive and how long the current epoch is taking, instead of a
-    bar that looks frozen until the first epoch ends.
+    elapsed, ETA). Between epochs a background thread animates a live bar a few
+    times a second so a long epoch never looks frozen: a bouncing bar during the
+    first epoch (unknown length) and an estimated-percent fill afterwards (once
+    the previous epoch's duration is known).
     """
 
+    _SPINNER = "|/-\\"
+    _BAR_WIDTH = 22
+    _BLOCK = 4
+
     def __init__(
-        self, total_epochs: int, *, prefix: str = "training", heartbeat: float = 15.0,
+        self, total_epochs: int, *, prefix: str = "training", interval: float = 0.2,
         stream: TextIO | None = None,
     ) -> None:
         self.total = max(int(total_epochs), 1)
         self.prefix = prefix
-        self.heartbeat = heartbeat
+        self.interval = interval
         self.stream = stream or sys.stderr
         self._subscription = None
         self._events = None
         self._start = 0.0
         self._last_epoch_time = 0.0
+        self._est_epoch = 0.0  # duration of the last finished epoch, for the estimate
         self._completed = 0
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -96,21 +101,38 @@ class TrainingProgress:
         self._start = self._last_epoch_time = time.perf_counter()
         self._subscription = EVENTS.subscribe("train.epoch_end", self._on_epoch_end)
         print(
-            f"{self.prefix}: {self.total} epochs "
-            f"(one line per epoch; heartbeat every {self.heartbeat:.0f}s)",
+            f"{self.prefix}: {self.total} epochs (one line per epoch; live bar below)",
             file=self.stream,
         )
         self._thread = threading.Thread(target=self._beat, daemon=True)
         self._thread.start()
         return self
 
+    def _indeterminate_bar(self, tick: int) -> str:
+        """A block bouncing left<->right, so it visibly moves without a known %."""
+        span = self._BAR_WIDTH - self._BLOCK
+        cycle = tick % (2 * span or 1)
+        pos = cycle if cycle <= span else 2 * span - cycle
+        return "-" * pos + "#" * self._BLOCK + "-" * (span - pos)
+
+    def _estimated_bar(self, fraction: float) -> str:
+        filled = int(min(fraction, 1.0) * self._BAR_WIDTH)
+        return "#" * filled + "-" * (self._BAR_WIDTH - filled)
+
     def _beat(self) -> None:
-        while not self._stop.wait(self.heartbeat):
-            elapsed = time.perf_counter() - self._start
+        tick = 0
+        while not self._stop.wait(self.interval):
+            tick += 1
+            spin = self._SPINNER[tick % len(self._SPINNER)]
             in_epoch = time.perf_counter() - self._last_epoch_time
+            if self._est_epoch > 0:  # we know how long an epoch takes -> estimate %
+                fraction = in_epoch / self._est_epoch
+                body = f"[{self._estimated_bar(fraction)}] ~{min(fraction, 0.999) * 100:4.1f}%"
+            else:  # first epoch: unknown length -> animated bounce
+                body = f"[{self._indeterminate_bar(tick)}]"
             self.stream.write(
-                f"\r  ...epoch {self._completed + 1}/{self.total} running  "
-                f"(this epoch {format_duration(in_epoch)}, total {format_duration(elapsed)})   "
+                f"\r  {spin} epoch {self._completed + 1}/{self.total}  {body}  "
+                f"{format_duration(in_epoch)}   "
             )
             self.stream.flush()
 
@@ -119,6 +141,7 @@ class TrainingProgress:
         self._completed = int(event.get("epoch", 0)) + 1
         epoch_time = now - self._last_epoch_time
         self._last_epoch_time = now
+        self._est_epoch = epoch_time  # use the last epoch's time to estimate the next
         elapsed = now - self._start
         eta = (elapsed / self._completed) * (self.total - self._completed)
         loss = event.get("loss")
