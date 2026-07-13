@@ -109,6 +109,28 @@ def _subset(dataset, limit: int | None):
     )
 
 
+def _steps_per_epoch(num_images: int, batch_size: int) -> int:
+    """Batches per epoch, mirroring the trainer's drop-last DataLoader."""
+    return max(num_images // batch_size, 1) if num_images > batch_size else 1
+
+
+def _train_with_progress(detector, progress, train_kwargs) -> None:
+    """Run ``detector.train`` with a forward hook feeding batch-level progress.
+
+    The hook goes on the backbone: ``compute_losses`` invokes ``self.forward``
+    directly (bypassing module ``__call__`` hooks on the detector itself), but
+    the backbone runs through ``__call__`` exactly once per training batch.
+    Per-epoch evaluation uses the EMA deepcopy, so eval forwards are not
+    counted -- the bar shows a true ``batch i/N`` fill from the first epoch.
+    """
+    hook = detector.model.backbone.register_forward_hook(lambda *_: progress.on_batch())
+    try:
+        with progress:
+            detector.train(**train_kwargs)
+    finally:
+        hook.remove()
+
+
 def run_accuracy(
     output_dir: str | Path,
     *,
@@ -148,11 +170,15 @@ def run_accuracy(
         print(f"  dataset: {len(train)} train / {len(val)} val images, "
               f"{num_classes} classes", file=sys.stderr)
         detector = Detector(variant, num_classes=num_classes, image_size=image_size, device=device)
-        with history, TrainingProgress(epochs, prefix=f"  training {variant} on {dataset_name}"):
-            detector.train(
+        progress = TrainingProgress(
+            epochs, prefix=f"  training {variant} on {dataset_name}",
+            steps_per_epoch=_steps_per_epoch(len(train), batch_size),
+        )
+        with history:
+            _train_with_progress(detector, progress, dict(
                 train_data=train, val_data=val, epochs=epochs, batch_size=batch_size, lr=lr,
                 workers=workers, checkpoint_dir=output_dir / "checkpoints",
-            )
+            ))
     else:
         dataset_name = "shapes (synthetic)"
         workdir = output_dir / "_shapes_data"
@@ -164,11 +190,15 @@ def run_accuracy(
         )
         num_classes = len(train.categories)
         detector = Detector(variant, num_classes=num_classes, image_size=image_size, device=device)
-        with history, TrainingProgress(epochs, prefix=f"  training {variant} on {dataset_name}"):
-            detector.train(
+        progress = TrainingProgress(
+            epochs, prefix=f"  training {variant} on {dataset_name}",
+            steps_per_epoch=_steps_per_epoch(len(train), batch_size),
+        )
+        with history:
+            _train_with_progress(detector, progress, dict(
                 train_data=train, val_data=val, epochs=epochs, batch_size=batch_size, lr=lr,
                 workers=workers, checkpoint_dir=output_dir / "checkpoints",
-            )
+            ))
 
     metrics = detector.evaluate(val)
     result = AccuracyResult(

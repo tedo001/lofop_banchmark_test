@@ -79,11 +79,12 @@ class TrainingProgress:
 
     def __init__(
         self, total_epochs: int, *, prefix: str = "training", interval: float = 0.2,
-        stream: TextIO | None = None,
+        steps_per_epoch: int | None = None, stream: TextIO | None = None,
     ) -> None:
         self.total = max(int(total_epochs), 1)
         self.prefix = prefix
         self.interval = interval
+        self.steps_per_epoch = steps_per_epoch
         self.stream = stream or sys.stderr
         self._subscription = None
         self._events = None
@@ -91,8 +92,13 @@ class TrainingProgress:
         self._last_epoch_time = 0.0
         self._est_epoch = 0.0  # duration of the last finished epoch, for the estimate
         self._completed = 0
+        self._batches = 0  # forwards seen in the current epoch (via on_batch)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+
+    def on_batch(self) -> None:
+        """Notify that one training batch finished (wired via a forward hook)."""
+        self._batches += 1
 
     def __enter__(self) -> TrainingProgress:
         from lofop.registries import EVENTS
@@ -125,10 +131,17 @@ class TrainingProgress:
             tick += 1
             spin = self._SPINNER[tick % len(self._SPINNER)]
             in_epoch = time.perf_counter() - self._last_epoch_time
-            if self._est_epoch > 0:  # we know how long an epoch takes -> estimate %
+            if self.steps_per_epoch:  # true progress: batches done this epoch
+                done = min(self._batches, self.steps_per_epoch)
+                fraction = done / self.steps_per_epoch
+                body = (
+                    f"[{self._estimated_bar(fraction)}] {fraction * 100:4.1f}%  "
+                    f"batch {done}/{self.steps_per_epoch}"
+                )
+            elif self._est_epoch > 0:  # estimate from the last epoch's duration
                 fraction = in_epoch / self._est_epoch
                 body = f"[{self._estimated_bar(fraction)}] ~{min(fraction, 0.999) * 100:4.1f}%"
-            else:  # first epoch: unknown length -> animated bounce
+            else:  # unknown length -> animated bounce
                 body = f"[{self._indeterminate_bar(tick)}]"
             self.stream.write(
                 f"\r  {spin} epoch {self._completed + 1}/{self.total}  {body}  "
@@ -142,6 +155,7 @@ class TrainingProgress:
         epoch_time = now - self._last_epoch_time
         self._last_epoch_time = now
         self._est_epoch = epoch_time  # use the last epoch's time to estimate the next
+        self._batches = 0  # new epoch starts counting from zero
         elapsed = now - self._start
         eta = (elapsed / self._completed) * (self.total - self._completed)
         loss = event.get("loss")
@@ -156,7 +170,7 @@ class TrainingProgress:
             f"elapsed {format_duration(elapsed)}",
             f"ETA {format_duration(eta)}",
         ]
-        self.stream.write("\r" + " " * 78 + "\r")  # clear the heartbeat line
+        self.stream.write("\r" + " " * 100 + "\r")  # clear the heartbeat line
         print("  " + "   ".join(parts), file=self.stream)
 
     def __exit__(self, *exc_info) -> None:
@@ -165,7 +179,7 @@ class TrainingProgress:
             self._thread.join(timeout=1.0)
         if self._subscription is not None and self._events is not None:
             self._events.unsubscribe(self._subscription)
-        self.stream.write("\r" + " " * 78 + "\r")
+        self.stream.write("\r" + " " * 100 + "\r")
         print(
             f"  {self.prefix}: done in {format_duration(time.perf_counter() - self._start)}",
             file=self.stream,
