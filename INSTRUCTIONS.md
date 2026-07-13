@@ -240,6 +240,29 @@ them yourself.
   time, ETA) plus a heartbeat while an epoch is in progress, so after epoch 1
   finishes you know the total time.
 
+### Training is slow? Read this
+
+Epoch time scales with **model size x image size x image count**. If a run is
+taking hours, pull these levers (each is a big cut):
+
+| Lever | Slow | Fast |
+|---|---|---|
+| `--variant` | `ex` (20M params) | `n` (1.3M) |
+| `--acc-size` | `640` | `416` or `320` |
+| `--epochs` | `60` | `20` (get a first number, then decide) |
+| `--limit-train-images` | all | `2000` (fewer images per epoch) |
+| `--workers` | `0` | `8` (parallel loading) |
+
+**Fast first run (minutes, not hours):**
+
+```bash
+python run_benchmarks.py --device cuda --data-config configs/coco.yaml \
+    --variant n --acc-size 416 --epochs 20 --limit-train-images 2000 --workers 8 \
+    --skip-latency --skip-structural --plots
+```
+
+Then scale up the levers once you see the mAP curve climbing.
+
 ---
 
 ## Iterate with Claude Code

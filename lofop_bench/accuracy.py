@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import random
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -97,6 +98,17 @@ def _resolve_device(device: str) -> str:
     return device
 
 
+def _subset(dataset, limit: int | None):
+    """Take the first ``limit`` samples for a faster run (categories unchanged)."""
+    if not limit or limit >= len(dataset):
+        return dataset
+    from lofop.data.dataset import Dataset
+
+    return Dataset(
+        dataset.name, dataset.categories, dataset.samples[:limit], image_root=dataset.image_root
+    )
+
+
 def run_accuracy(
     output_dir: str | Path,
     *,
@@ -113,6 +125,8 @@ def run_accuracy(
     train_source: str | None = None,
     val_source: str | None = None,
     image_root: str | None = None,
+    limit_train: int | None = None,
+    limit_val: int | None = None,
     # Synthetic-mode sizing.
     train_images: int = 48,
     val_images: int = 16,
@@ -128,13 +142,15 @@ def run_accuracy(
     if data_format and train_source:
         dataset_name = data_format
         kwargs = {"image_root": image_root} if image_root else {}
-        val = load_dataset(data_format, val_source or train_source, **kwargs)
+        train = _subset(load_dataset(data_format, train_source, **kwargs), limit_train)
+        val = _subset(load_dataset(data_format, val_source or train_source, **kwargs), limit_val)
         num_classes = len(val.categories)
+        print(f"  dataset: {len(train)} train / {len(val)} val images, "
+              f"{num_classes} classes", file=sys.stderr)
         detector = Detector(variant, num_classes=num_classes, image_size=image_size, device=device)
         with history, TrainingProgress(epochs, prefix=f"  training {variant} on {dataset_name}"):
             detector.train(
-                data_format=data_format, train_source=train_source, val_source=val_source,
-                image_root=image_root, epochs=epochs, batch_size=batch_size, lr=lr,
+                train_data=train, val_data=val, epochs=epochs, batch_size=batch_size, lr=lr,
                 workers=workers, checkpoint_dir=output_dir / "checkpoints",
             )
     else:
