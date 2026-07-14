@@ -144,15 +144,25 @@ def stage_train(args) -> None:
     from lofop_bench import run_accuracy
 
     cfg = _read_config()
-    result = run_accuracy(
-        RESULTS, variant=args.variant, device=args.device, epochs=args.epochs,
-        image_size=args.acc_size, batch_size=args.batch_size, lr=args.lr,
-        workers=args.workers, checkpoint=checkpoint, data_format="coco",
-        train_source=str(ROOT / cfg["train_source"]),
-        val_source=str(ROOT / cfg["val_source"]),
-        image_root=str(ROOT / cfg["image_root"]),
-        limit_train=args.limit_train, limit_val=args.limit_val,
-    )
+    try:
+        result = run_accuracy(
+            RESULTS, variant=args.variant, device=args.device, epochs=args.epochs,
+            image_size=args.acc_size, batch_size=args.batch_size, lr=args.lr,
+            workers=args.workers, checkpoint=checkpoint, data_format="coco",
+            train_source=str(ROOT / cfg["train_source"]),
+            val_source=str(ROOT / cfg["val_source"]),
+            image_root=str(ROOT / cfg["image_root"]),
+            limit_train=args.limit_train, limit_val=args.limit_val,
+        )
+    except RuntimeError as exc:
+        if checkpoint and ("size mismatch" in str(exc) or "state_dict" in str(exc)):
+            raise SystemExit(
+                "--finetune failed: results/checkpoints/best.pt was trained with a "
+                "different class count or variant than the current dataset config, so "
+                "its weights do not fit this model. Train once from scratch (omit "
+                "--finetune); later rounds can then fine-tune that checkpoint."
+            ) from exc
+        raise
     print(result.to_markdown())
 
 
@@ -266,7 +276,14 @@ def main(argv: list[str] | None = None) -> int:
         "data": stage_data, "check": stage_check, "train": stage_train,
         "detect": stage_detect, "report": stage_report,
     }
-    selected = STAGES if args.stage == "all" else (args.stage,)
+    selected = list(STAGES) if args.stage == "all" else [args.stage]
+    # Stages after "data" need configs/pipeline.yaml; create it automatically
+    # instead of failing when someone jumps straight to train/detect.
+    needs_config = any(name in ("check", "train", "detect") for name in selected)
+    if needs_config and "data" not in selected and not CONFIG_PATH.is_file():
+        print("configs/pipeline.yaml not found -- running the data stage first",
+              file=sys.stderr)
+        selected.insert(0, "data")
     for name in selected:
         runners[name](args)
     print("\nPipeline complete.", file=sys.stderr)
