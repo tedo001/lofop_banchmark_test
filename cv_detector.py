@@ -64,13 +64,16 @@ def _draw(frame, detections, class_names) -> None:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
 
 
-def _overlay_fps(frame, fps: float, count: int) -> None:
+def _overlay_status(frame, fps: float, count: int, score_thr: float, nms_iou: float) -> None:
     import cv2
 
-    text = f"FPS {fps:5.1f}   objects {count}"
-    cv2.rectangle(frame, (0, 0), (240, 26), (0, 0, 0), -1)
+    text = f"FPS {fps:5.1f}  objects {count}  conf {score_thr:.2f}  iou {nms_iou:.2f}"
+    keys = "+/- conf   [/] iou   q quit"
+    cv2.rectangle(frame, (0, 0), (430, 44), (0, 0, 0), -1)
     cv2.putText(frame, text, (6, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.55,
                 (0, 255, 0), 1, cv2.LINE_AA)
+    cv2.putText(frame, keys, (6, 38), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
+                (180, 180, 180), 1, cv2.LINE_AA)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -121,20 +124,26 @@ def run(args: argparse.Namespace) -> int:
 
     writer = None
     smoothed = 0.0
-    print("Running live detection. Press 'q' in the window to quit.", file=sys.stderr)
+    score_thr = args.score_threshold
+    nms_iou = float(detector.model.nms_iou)
+    print(
+        "Running live detection. Keys: +/- confidence threshold, [/] NMS IoU, q quit.",
+        file=sys.stderr,
+    )
     while True:
         ok, frame = capture.read()
         if not ok:
             break
         start = time.perf_counter()
+        detector.model.nms_iou = nms_iou
         detections = detector.predict(
             Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)),
-            score_threshold=args.score_threshold,
+            score_threshold=score_thr,
         )[0]
         _draw(frame, detections, class_names)
         instant = 1.0 / max(time.perf_counter() - start, 1e-6)
         smoothed = instant if smoothed == 0 else 0.9 * smoothed + 0.1 * instant
-        _overlay_fps(frame, smoothed, len(detections.boxes))
+        _overlay_status(frame, smoothed, len(detections.boxes), score_thr, nms_iou)
 
         if args.save:
             if writer is None:
@@ -145,8 +154,17 @@ def run(args: argparse.Namespace) -> int:
             writer.write(frame)
 
         cv2.imshow("LOFOP live detection", frame)
-        if cv2.waitKey(1) & 0xFF == ord("q"):
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord("q"):
             break
+        if key in (ord("+"), ord("=")):   # raise the confidence cut -> fewer boxes
+            score_thr = min(round(score_thr + 0.05, 2), 0.95)
+        elif key in (ord("-"), ord("_")):  # lower the cut -> more boxes
+            score_thr = max(round(score_thr - 0.05, 2), 0.05)
+        elif key == ord("]"):              # allow more overlap between kept boxes
+            nms_iou = min(round(nms_iou + 0.05, 2), 0.95)
+        elif key == ord("["):              # merge overlapping boxes more aggressively
+            nms_iou = max(round(nms_iou - 0.05, 2), 0.10)
 
     capture.release()
     if writer is not None:

@@ -9,6 +9,23 @@ and accuracy.
 > **New here? Read [INSTRUCTIONS.md](INSTRUCTIONS.md)** for the full step-by-step
 > guide (PyCharm + GitHub + Claude Code, on an RTX 4060 laptop).
 
+## The one-command pipeline
+
+If the individual commands feel confusing, use the pipeline — it runs the whole
+ML workflow in the right order with defaults that actually learn (one focused
+class instead of 80 spread over too few images):
+
+```bash
+python pipeline.py --device cuda --fast    # data -> check -> train -> detect -> report
+python pipeline.py --device cuda           # the longer, proper run
+python pipeline.py --stage detect          # re-run one stage
+```
+
+It reuses images you already downloaded (filters the annotations locally, no
+re-download), shows ground-truth previews before spending GPU time, trains with
+the classic epoch/iteration log, runs the trained model on val images, and ends
+with a report of every metric and artifact.
+
 ## Benchmarks
 
 | Benchmark | What it measures | GPU |

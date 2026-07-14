@@ -3,6 +3,12 @@
 A complete guide for your stack: **PyCharm** (edit/run) + **GitHub** (store code
 and results) + **Claude Code** (iterate), on your **RTX 4060 OMEN laptop**.
 
+> **Shortcut: the one-command pipeline.** Once setup (section 1) is done,
+> `python pipeline.py --device cuda --fast` runs the whole workflow —
+> data → check → train → detect → report — with sane defaults (one focused
+> class, capped val set, parallel loading). The staged guide below explains
+> what each piece does; the pipeline just runs them in order for you.
+
 The plan, in order:
 
 1. Set up the project and GPU.
@@ -119,7 +125,17 @@ python cv_detector.py --data-config configs/coco128.yaml --size 640
 ```
 
 Opens your laptop camera and runs the detector live with boxes + an FPS overlay.
-Press **`q`** in the window to quit. Also works on a video or a single image:
+Live keys (shown on screen):
+
+| Key | Effect |
+|---|---|
+| `+` / `-` | raise / lower the **confidence threshold** (raise it to hide weak, junky boxes) |
+| `]` / `[` | loosen / tighten the **NMS IoU** (tighten it to merge overlapping duplicate boxes) |
+| `q` | quit |
+
+A weakly-trained model floods the screen with 0.2-0.3 confidence boxes — press
+`+` a few times (e.g. up to 0.40) and `[` to clean the view instantly. Also
+works on a video or a single image:
 
 ```bash
 python cv_detector.py --source clip.mp4  --data-config configs/coco128.yaml --save out.mp4
