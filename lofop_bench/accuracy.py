@@ -150,6 +150,7 @@ def run_accuracy(
     lr: float = 0.01,
     workers: int = 0,
     seed: int = 0,
+    checkpoint: str | Path | None = None,
     # Real-dataset mode (all four together); omit to use synthetic shapes.
     data_format: str | None = None,
     train_source: str | None = None,
@@ -177,7 +178,10 @@ def run_accuracy(
         num_classes = len(val.categories)
         print(f"  dataset: {len(train)} train / {len(val)} val images, "
               f"{num_classes} classes", file=sys.stderr)
-        detector = Detector(variant, num_classes=num_classes, image_size=image_size, device=device)
+        detector = Detector(
+            variant, num_classes=num_classes, image_size=image_size, device=device,
+            checkpoint=checkpoint,
+        )
         progress = TrainingProgress(
             epochs, prefix=f"  training {variant} on {dataset_name}",
             steps_per_epoch=_steps_per_epoch(len(train), batch_size),
@@ -197,7 +201,10 @@ def run_accuracy(
             workdir / "val", num_images=val_images, image_size=image_size, seed=seed + 1
         )
         num_classes = len(train.categories)
-        detector = Detector(variant, num_classes=num_classes, image_size=image_size, device=device)
+        detector = Detector(
+            variant, num_classes=num_classes, image_size=image_size, device=device,
+            checkpoint=checkpoint,
+        )
         progress = TrainingProgress(
             epochs, prefix=f"  training {variant} on {dataset_name}",
             steps_per_epoch=_steps_per_epoch(len(train), batch_size),

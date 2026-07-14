@@ -127,10 +127,19 @@ def stage_check(args) -> None:
 # -- stage 3: train ------------------------------------------------------------
 
 def stage_train(args) -> None:
+    checkpoint = None
+    if args.finetune:
+        checkpoint = RESULTS / "checkpoints" / "best.pt"
+        if not checkpoint.is_file():
+            raise SystemExit(
+                "--finetune needs existing weights at results/checkpoints/best.pt -- "
+                "run a training first (python pipeline.py --stage train)"
+            )
     banner(
         3, "train",
         f"variant {args.variant}, {args.epochs} epochs @ {args.acc_size}px, "
-        f"batch {args.batch_size}, device {args.device}",
+        f"batch {args.batch_size}, lr {args.lr}, device {args.device}"
+        + (", fine-tuning from best.pt" if checkpoint else ""),
     )
     from lofop_bench import run_accuracy
 
@@ -138,7 +147,7 @@ def stage_train(args) -> None:
     result = run_accuracy(
         RESULTS, variant=args.variant, device=args.device, epochs=args.epochs,
         image_size=args.acc_size, batch_size=args.batch_size, lr=args.lr,
-        workers=args.workers, data_format="coco",
+        workers=args.workers, checkpoint=checkpoint, data_format="coco",
         train_source=str(ROOT / cfg["train_source"]),
         val_source=str(ROOT / cfg["val_source"]),
         image_root=str(ROOT / cfg["image_root"]),
@@ -226,10 +235,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fast", action="store_true",
                         help="quicker settings (fewer epochs, smaller images/subset)")
     parser.add_argument("--variant", default="n")
+    parser.add_argument("--finetune", action="store_true",
+                        help="continue from results/checkpoints/best.pt with a lower LR "
+                             "instead of training from scratch (same variant + classes)")
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--acc-size", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=16)
-    parser.add_argument("--lr", type=float, default=0.01)
+    parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--limit-train", type=int, default=None)
     parser.add_argument("--limit-val", type=int, default=500)
@@ -239,13 +251,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    # Mode defaults: --fast for iteration, full for a proper run.
+    # Mode defaults: --fast for iteration, full for a proper run. Fine-tuning
+    # continues from trained weights, so it uses a gentler learning rate.
     if args.epochs is None:
         args.epochs = 30 if args.fast else 80
     if args.acc_size is None:
         args.acc_size = 416 if args.fast else 512
     if args.limit_train is None:
         args.limit_train = 1500 if args.fast else 4000
+    if args.lr is None:
+        args.lr = 0.002 if args.finetune else 0.01
 
     runners = {
         "data": stage_data, "check": stage_check, "train": stage_train,

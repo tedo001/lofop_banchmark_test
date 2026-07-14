@@ -226,6 +226,21 @@ takes far more epochs and data than fine-tuning. Levers, in order of impact:
 5. **Tune training** — `--batch-size` (raise it while VRAM allows) and `--lr`.
 6. **Fewer classes** — a 1-3 class detector trained well beats a weak 80-class one.
 
+**Fine-tune instead of restarting.** Every training run saves its best weights
+to `results/checkpoints/best.pt`. Continue from them (same variant and classes)
+with more data and a gentler learning rate instead of starting from zero:
+
+```bash
+python pipeline.py --device cuda --stage train --finetune --epochs 120 --limit-train 8000
+python pipeline.py --stage detect            # see the improved detections
+python pipeline.py --stage report            # updated metrics + curve
+```
+
+`--finetune` loads `best.pt` and drops the default LR to 0.002 (override with
+`--lr`). Repeat rounds, raising `--limit-train` each time, and watch best
+mAP@50 climb across rounds. (`run_benchmarks.py --checkpoint path.pt` does the
+same outside the pipeline.)
+
 **Read the curve to decide.** Every run with `--plots` writes
 `results/accuracy_curve.png` (mAP@50 and loss vs. epoch):
 

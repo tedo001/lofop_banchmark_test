@@ -68,6 +68,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="train on only the first N images (faster epochs)")
     parser.add_argument("--limit-val-images", type=int, default=None,
                         help="evaluate on only the first N images")
+    parser.add_argument("--checkpoint", type=Path, default=None,
+                        help="fine-tune: start from these weights instead of from scratch")
     parser.add_argument("--data-config", type=Path, default=None,
                         help="YAML with data_format/train_source/val_source/image_root")
     parser.add_argument("--data-format", default=None)
@@ -114,7 +116,8 @@ def main(argv: list[str] | None = None) -> int:
         accuracy_result = run_accuracy(
             args.results_dir, variant=args.variant, device=device, epochs=args.epochs,
             image_size=args.acc_size, batch_size=args.batch_size, lr=args.lr,
-            workers=args.workers, data_format=data_format, train_source=train_source,
+            workers=args.workers, checkpoint=args.checkpoint,
+            data_format=data_format, train_source=train_source,
             val_source=val_source, image_root=image_root,
             limit_train=args.limit_train_images, limit_val=args.limit_val_images,
         )
