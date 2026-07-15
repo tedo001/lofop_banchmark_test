@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import random
+import shutil
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -231,4 +232,17 @@ def run_accuracy(
     (output_dir / f"{basename}_history.json").write_text(
         json.dumps(history.epochs, indent=2) + "\n", encoding="utf-8"
     )
+
+    # Publish the best weights under a proper model name, e.g.
+    # models/lofop-detect-n-person.pt (dataset scope from the class names).
+    best = output_dir / "checkpoints" / "best.pt"
+    if best.is_file():
+        scope = "-".join(c.name.replace(" ", "_") for c in val.categories[:3])
+        if len(val.categories) > 3:
+            scope = f"{len(val.categories)}cls"
+        models_dir = output_dir / "models"
+        models_dir.mkdir(parents=True, exist_ok=True)
+        named = models_dir / f"lofop-detect-{variant}-{scope}.pt"
+        shutil.copy2(best, named)
+        print(f"  model saved: {named}", file=sys.stderr)
     return result

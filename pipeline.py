@@ -208,6 +208,7 @@ def stage_report(args) -> None:
         ("metrics", "results/accuracy.md"),
         ("per-epoch history", "results/accuracy_history.json"),
         ("weights", "results/checkpoints/best.pt"),
+        ("named model (.pt)", "results/models/"),
         ("detections", "results/detections/"),
         ("ground-truth previews", "results/gt_samples/"),
     ]:
