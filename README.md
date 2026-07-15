@@ -142,6 +142,7 @@ lofop_bench/
   plots.py        # optional matplotlib charts + summary.png report image
 run_benchmarks.py # CLI entry point -> results/
 cv_detector.py    # live detection: webcam / video / image, with FPS overlay
+lofop-app.py      # Tkinter desktop app: analyze a photo/video -> saved report
 scripts/
   get_coco128.py  # download COCO128 (optionally one class) as a COCO dataset
   get_coco.py     # download real COCO val2017 (5,000 images) for quality training

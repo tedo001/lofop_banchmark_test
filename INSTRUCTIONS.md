@@ -142,6 +142,22 @@ python cv_detector.py --source clip.mp4  --data-config configs/coco128.yaml --sa
 python cv_detector.py --source photo.jpg --data-config configs/coco128.yaml
 ```
 
+### A4b. The desktop app (photos and videos with a saved report)
+
+```bash
+python lofop-app.py
+```
+
+A small window opens: **Open Photo...** or **Open Video...**, watch the
+annotated preview with a progress bar, adjust the confidence slider, and press
+**Stop** to end a long video early. Every run saves a report to
+`results/app_reports/<timestamp>/`: `report.md` + `report.json` (per-class
+counts, mean confidence, processing FPS) plus the annotated photo or `.mp4`.
+It picks up your newest model from `results/models/` automatically (or
+`results/checkpoints/best.pt`), and class names from `configs/pipeline.yaml`;
+both are changeable in the app. `Frame step 2` analyzes every 2nd video frame
+for speed.
+
 ### A5. Full speed benchmark + one results image
 
 ```bash
