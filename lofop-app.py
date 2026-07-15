@@ -101,10 +101,12 @@ class Analyzer:
             class_names=self.class_names, image_size=image_size,
         )
 
-    def detect_frame(self, frame_bgr, confidence: float):
+    def detect_frame(self, frame_bgr, confidence: float, nms_iou: float | None = None):
         import cv2
         from PIL import Image
 
+        if nms_iou is not None:
+            self.detector.model.nms_iou = nms_iou
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         return self.detector.predict(Image.fromarray(rgb), score_threshold=confidence)[0]
 
@@ -198,7 +200,8 @@ def save_report(report: dict) -> Path:
 
 
 def analyze_photo(analyzer: Analyzer, path: Path, confidence: float,
-                  settings: dict, out_dir: Path | None = None):
+                  settings: dict, out_dir: Path | None = None,
+                  nms_iou: float | None = None):
     """Detect on one photo; returns (annotated_bgr, report, out_dir)."""
     import cv2
 
@@ -206,7 +209,7 @@ def analyze_photo(analyzer: Analyzer, path: Path, confidence: float,
     if frame is None:
         raise ValueError(f"Could not read image {path}")
     stats = _new_stats()
-    detections = analyzer.detect_frame(frame, confidence)
+    detections = analyzer.detect_frame(frame, confidence, nms_iou)
     _update_stats(stats, detections, analyzer.class_names)
     draw_detections(frame, detections, analyzer.class_names)
     report = build_report(path, "photo", stats, settings)
@@ -219,7 +222,8 @@ def analyze_photo(analyzer: Analyzer, path: Path, confidence: float,
 
 
 def analyze_video(analyzer: Analyzer, path: Path, confidence: float, frame_step: int,
-                  settings: dict, on_frame, stop_event: threading.Event):
+                  settings: dict, on_frame, stop_event: threading.Event,
+                  nms_iou: float | None = None):
     """Detect over a video; returns (report, out_dir).
 
     ``on_frame(annotated_bgr, index, total)`` is called for each processed
@@ -245,7 +249,7 @@ def analyze_video(analyzer: Analyzer, path: Path, confidence: float, frame_step:
             stopped = True
             break
         if index % max(frame_step, 1) == 0:
-            detections = analyzer.detect_frame(frame, confidence)
+            detections = analyzer.detect_frame(frame, confidence, nms_iou)
             _update_stats(stats, detections, analyzer.class_names)
             draw_detections(frame, detections, analyzer.class_names)
             if writer is None:
@@ -298,6 +302,14 @@ class App:
         self.conf_label.pack(side="left")
         self.confidence.trace_add(
             "write", lambda *_: self.conf_label.config(text=f"{self.confidence.get():.2f}"))
+        ttk.Label(controls, text="Box merge (IoU)").pack(side="left", padx=(18, 4))
+        self.nms_iou = tk.DoubleVar(value=0.45)
+        ttk.Scale(controls, from_=0.10, to=0.90, variable=self.nms_iou,
+                  length=110).pack(side="left")
+        self.iou_label = ttk.Label(controls, text="0.45", width=5)
+        self.iou_label.pack(side="left")
+        self.nms_iou.trace_add(
+            "write", lambda *_: self.iou_label.config(text=f"{self.nms_iou.get():.2f}"))
         ttk.Label(controls, text="Frame step").pack(side="left", padx=(18, 4))
         self.frame_step = tk.IntVar(value=2)
         ttk.Spinbox(controls, from_=1, to=10, textvariable=self.frame_step,
@@ -351,6 +363,7 @@ class App:
             "checkpoint": self.checkpoint_var.get(),
             "config": self.config_var.get() or None,
             "confidence": round(self.confidence.get(), 2),
+            "nms_iou": round(self.nms_iou.get(), 2),
             "image_size": 416,
             "frame_step": int(self.frame_step.get()),
         }
@@ -406,7 +419,8 @@ class App:
     def _photo_worker(self, path: Path) -> None:
         try:
             frame, report, out_dir = analyze_photo(
-                self.analyzer, path, self.confidence.get(), self._settings())
+                self.analyzer, path, self.confidence.get(), self._settings(),
+                nms_iou=self.nms_iou.get())
             self.queue.put(("frame", frame, 1, 1))
             self.queue.put(("done", report, out_dir))
         except Exception as exc:
@@ -418,7 +432,7 @@ class App:
                 self.analyzer, path, self.confidence.get(), int(self.frame_step.get()),
                 self._settings(),
                 on_frame=lambda f, i, t: self.queue.put(("frame", f, i, t)),
-                stop_event=self.stop_event,
+                stop_event=self.stop_event, nms_iou=self.nms_iou.get(),
             )
             self.queue.put(("done", report, out_dir))
         except Exception as exc:

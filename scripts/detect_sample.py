@@ -46,6 +46,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--num-classes", type=int, default=80)
     parser.add_argument("--size", type=int, default=640)
     parser.add_argument("--score-threshold", type=float, default=0.25)
+    parser.add_argument("--nms-iou", type=float, default=None,
+                        help="lower (e.g. 0.4) merges overlapping duplicate boxes harder")
     parser.add_argument("--limit", type=int, default=6, help="images to sample from --data-config")
     parser.add_argument("--out", type=Path, default=REPO_ROOT / "results" / "detections")
     args = parser.parse_args(argv)
@@ -75,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
     from PIL import Image
 
     args.out.mkdir(parents=True, exist_ok=True)
+    if args.nms_iou is not None:
+        detector.model.nms_iou = args.nms_iou
     detections = detector.predict(images, score_threshold=args.score_threshold)
     for image_path, result in zip(images, detections):
         with Image.open(image_path) as image:
